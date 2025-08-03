@@ -45,17 +45,50 @@ TEST_CASE("clz") {
 	}
 	printf("%llx, %d\n", 0LLU, clz64(0));
 	*/
-
+	REQUIRE(clz(0) == 0);
 	for (int i = 0; i < 32; i++)
 	{
 		uint32_t input = (0x80000000) >> i;
+		printf("%d", clz(input));
 		REQUIRE(clz(input) == i);
 		REQUIRE(clz(input | (input - 1)) == i);
 	}
+	REQUIRE(clz64(0) == 0);
 	for (int i = 0; i < 64; i++)
 	{
 		uint64_t input = (0x8000000000000000LLU) >> i;
 		REQUIRE(clz64(input) == i);
 		REQUIRE(clz64(input | (input - 1)) == i);
+	}
+}
+
+TEST_CASE("ffs") {
+	using namespace min_lbvh;
+	using namespace pr;
+	/*
+	printf("--32bit--\n");
+	printf("%x, %d\n", 0, ffs(0));
+	for (int i = 0; i < 32; i++)
+	{
+		uint32_t input = 0x1u << i;
+		printf("%x, %d\n", input, ffs(input));
+		printf("%x, %d\n", input, ffs(input | ~(input - 1)));
+	}
+	*/
+
+	REQUIRE(ffs(0) == 0);
+	for (int i = 0; i < 32; i++)
+	{
+		uint32_t input = 0x1u << i;
+		REQUIRE(ffs(input) == i + 1);
+		REQUIRE(ffs(input | ~(input - 1)) == i + 1);
+	}
+
+	REQUIRE(ffs64(0) == 0);
+	for (int i = 0; i < 64; i++)
+	{
+		uint64_t input = 0x1llu << i;
+		REQUIRE(ffs64(input) == i + 1);
+		REQUIRE(ffs64(input | ~(input - 1)) == i + 1);
 	}
 }

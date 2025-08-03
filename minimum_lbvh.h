@@ -1,5 +1,9 @@
 #pragma once
 
+#if ( defined( __CUDACC__ ) || defined( __HIPCC__ ) )
+#define MINIMUM_LBVH_KERNELCC
+#endif
+
 #include <stdint.h>
 #include <intrin.h>
 
@@ -15,7 +19,7 @@ namespace min_lbvh
 	// Return the number of consecutive high-order zero bits in a 32-bit integer
 	inline int clz(uint32_t x)
 	{
-#if !defined( __KERNELCC__ )
+#if !defined( MINIMUM_LBVH_KERNELCC )
 		unsigned long scan;
 		if (_BitScanReverse(&scan, x) == 0)
 		{
@@ -28,7 +32,7 @@ namespace min_lbvh
 	}
 	inline int clz64(uint64_t x)
 	{
-#if !defined( __KERNELCC__ )
+#if !defined( MINIMUM_LBVH_KERNELCC )
 		unsigned long scan;
 		if (_BitScanReverse64(&scan, x) == 0)
 		{
@@ -36,13 +40,43 @@ namespace min_lbvh
 		}
 		return 63 - scan;
 #else
-		return __clz(x);
+		return __clzll(x);
+#endif
+	}
+
+	// Find the position of the least significant bit set to 1
+	inline int ffs(uint32_t x) {
+#if !defined( MINIMUM_LBVH_KERNELCC )
+		unsigned long scan;
+		if (_BitScanForward(&scan, x) == 0)
+		{
+			return 0;
+		}
+		return scan + 1;
+#else
+		return __ffs(x);
+#endif
+	}
+	inline int ffs64(uint64_t x) {
+#if !defined( MINIMUM_LBVH_KERNELCC )
+		unsigned long scan;
+		if (_BitScanForward64(&scan, x) == 0)
+		{
+			return 0;
+		}
+		return scan + 1;
+#else
+		return __ffsll(x);
 #endif
 	}
 
 	inline int delta(uint32_t a, uint32_t b)
 	{
 		return 32 - clz(a ^ b);
+	}
+	inline int delta(uint64_t a, uint64_t b)
+	{
+		return 64 - clz64(a ^ b);
 	}
 
 	inline uint64_t encodeMortonCode_Naive(uint32_t x, uint32_t y, uint32_t z)
