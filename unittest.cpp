@@ -1,11 +1,23 @@
 #include "catch_amalgamated.hpp"
 #include "prp.hpp"
 #include "minimum_lbvh.h"
+#include <bitset>
 
 TEST_CASE("Morton") {
-	using namespace min_lbvh;
+	using namespace minimum_lbvh;
 	using namespace pr;
 	PCG random;
+	for (int x = 0; x <= MORTON_MAX_VALUE_3D; x++)
+	{
+		std::bitset<64> splatted(splat3(x));
+		for (int i = 0; i < 21; i++)
+		{
+			bool setbit = x & (1LLU << i);
+			REQUIRE(splatted[i * 3] == setbit);
+		}
+		REQUIRE(x == compact3(splatted.to_ullong()));
+	}
+
 	for (int i = 0; i < 10000000; i++)
 	{
 		uint32_t x = random.uniformi() & MORTON_MAX_VALUE_3D; // 21 bits
@@ -25,7 +37,7 @@ TEST_CASE("Morton") {
 }
 
 TEST_CASE("clz") {
-	using namespace min_lbvh;
+	using namespace minimum_lbvh;
 	using namespace pr;
 	
 	/*
@@ -45,15 +57,14 @@ TEST_CASE("clz") {
 	}
 	printf("%llx, %d\n", 0LLU, clz64(0));
 	*/
-	REQUIRE(clz(0) == 0);
+	REQUIRE(clz(0) == 32);
 	for (int i = 0; i < 32; i++)
 	{
 		uint32_t input = (0x80000000) >> i;
-		printf("%d", clz(input));
 		REQUIRE(clz(input) == i);
 		REQUIRE(clz(input | (input - 1)) == i);
 	}
-	REQUIRE(clz64(0) == 0);
+	REQUIRE(clz64(0) == 64);
 	for (int i = 0; i < 64; i++)
 	{
 		uint64_t input = (0x8000000000000000LLU) >> i;
@@ -63,7 +74,7 @@ TEST_CASE("clz") {
 }
 
 TEST_CASE("ffs") {
-	using namespace min_lbvh;
+	using namespace minimum_lbvh;
 	using namespace pr;
 	/*
 	printf("--32bit--\n");
