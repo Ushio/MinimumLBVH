@@ -41,63 +41,6 @@ namespace minimum_lbvh
 		return { region_min, region_max };
 	}
 
-	struct Triangle
-	{
-		float3 vs[3];
-	};
-
-	struct AABB
-	{
-		float3 lower;
-		float3 upper;
-
-		void setEmpty()
-		{
-			lower = make_float3(+FLT_MAX);
-			upper = make_float3(-FLT_MAX);
-		}
-		void extend(const float3& p)
-		{
-			lower = fminf(lower, p);
-			upper = fmaxf(upper, p);
-		}
-
-		void extend(const AABB& b)
-		{
-			lower = fminf(lower, b.lower);
-			upper = fmaxf(upper, b.upper);
-		}
-		float surface_area() const
-		{
-			float3 size = upper - lower;
-			return (size.x * size.y + size.y * size.z + size.z * size.x) * 2.0f;
-		}
-
-		//uint64_t encodeMortonCode(float3 p) const
-		//{
-		//	uint32_t coord[3];
-		//	for (int i = 0; i < 3; i++)
-		//	{
-		//		int v = (int)remap(p[i], lower[i], upper[i], 0, MORTON_MAX_VALUE_3D + 1);
-		//		coord[i] = (uint32_t)clamp(v, 0, MORTON_MAX_VALUE_3D);
-		//	}
-		//}
-	};
-
-	struct NodeIndex
-	{
-		NodeIndex() :m_index(0), m_isLeaf(0) {}
-		NodeIndex(uint32_t index, bool isLeaf) :m_index(index), m_isLeaf(isLeaf) {}
-		uint32_t m_index : 31;
-		uint32_t m_isLeaf : 1;
-	};
-
-	struct LBVHNode
-	{
-		NodeIndex parent;
-		NodeIndex children[2];
-	};
-
 	// Return the number of consecutive high-order zero bits in a 32-bit integer
 	inline int clz(uint32_t x)
 	{
@@ -208,4 +151,58 @@ namespace minimum_lbvh
 		answer |= splat3(x) | splat3(y) << 1 | splat3(z) << 2;
 		return answer;
 	}
+
+	struct Triangle
+	{
+		float3 vs[3];
+	};
+
+	struct AABB
+	{
+		float3 lower;
+		float3 upper;
+
+		void setEmpty()
+		{
+			lower = make_float3(+FLT_MAX);
+			upper = make_float3(-FLT_MAX);
+		}
+		void extend(const float3& p)
+		{
+			lower = fminf(lower, p);
+			upper = fmaxf(upper, p);
+		}
+
+		void extend(const AABB& b)
+		{
+			lower = fminf(lower, b.lower);
+			upper = fmaxf(upper, b.upper);
+		}
+		float surface_area() const
+		{
+			float3 size = upper - lower;
+			return (size.x * size.y + size.y * size.z + size.z * size.x) * 2.0f;
+		}
+
+		uint64_t encodeMortonCode(float3 p) const
+		{
+			int3 coord = make_int3((p - lower) / (upper - lower) * (float)(MORTON_MAX_VALUE_3D + 1));
+			coord = clamp(coord, 0, MORTON_MAX_VALUE_3D);
+			return minimum_lbvh::encodeMortonCode(coord.x, coord.y, coord.z);
+		}
+	};
+
+	struct NodeIndex
+	{
+		NodeIndex() :m_index(0), m_isLeaf(0) {}
+		NodeIndex(uint32_t index, bool isLeaf) :m_index(index), m_isLeaf(isLeaf) {}
+		uint32_t m_index : 31;
+		uint32_t m_isLeaf : 1;
+	};
+
+	struct LBVHNode
+	{
+		NodeIndex parent;
+		NodeIndex children[2];
+	};
 }

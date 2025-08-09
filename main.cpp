@@ -202,7 +202,15 @@ int main() {
             }
             DrawAABB(to(sceneAABB.lower), to(sceneAABB.upper), { 255, 255, 255 });
 
-            std::vector<uint64_t> mortons;
+            std::vector<uint64_t> mortons(triangles.size());
+            for (int i = 0; i < triangles.size(); i++)
+            {
+                minimum_lbvh::Triangle tri = triangles[i];
+                float3 center = (tri.vs[0] + tri.vs[1] + tri.vs[2]) / 3.0f;
+                mortons[i] = sceneAABB.encodeMortonCode(center);
+            }
+
+            printf("");
         });
 
         PopGraphicState();
