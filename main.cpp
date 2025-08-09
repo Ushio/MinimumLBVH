@@ -3,7 +3,13 @@
 #include <memory>
 #include <string>
 #include <sstream>
+
 #include "minimum_lbvh.h"
+
+inline glm::vec3 to(float3 p)
+{
+    return { p.x, p.y, p.z };
+}
 
 void runToyExample()
 {
@@ -156,11 +162,9 @@ int main() {
                     tri.vs[j] = { p.x, p.y, p.z };
                 }
 
-                minimum_lbvh::Vec3 e0 = tri.vs[1] - tri.vs[0];
-                minimum_lbvh::Vec3 e1 = tri.vs[2] - tri.vs[1];
-                minimum_lbvh::Vec3 e2 = tri.vs[0] - tri.vs[2];
-
-                //tri.ng = cross(e0, e1);
+                float3 e0 = tri.vs[1] - tri.vs[0];
+                float3 e1 = tri.vs[2] - tri.vs[1];
+                float3 e2 = tri.vs[0] - tri.vs[2];
 
                 triangles.push_back(tri);
                 indexBase += nVerts;
@@ -174,15 +178,29 @@ int main() {
                 {
                     for (int j = 0; j < 3; ++j)
                     {
-                        minimum_lbvh::Vec3 v0 = tri.vs[j];
-                        minimum_lbvh::Vec3 v1 = tri.vs[(j + 1) % 3];
-                        pr::PrimVertex({ v0.xs[0], v0.xs[1], v0.xs[2] }, { 255, 255, 255 });
-                        pr::PrimVertex({ v1.xs[0], v1.xs[1], v1.xs[2] }, { 255, 255, 255 });
+                        float3 v0 = tri.vs[j];
+                        float3 v1 = tri.vs[(j + 1) % 3];
+                        pr::PrimVertex(to(v0), {255, 255, 255});
+                        pr::PrimVertex(to(v1), {255, 255, 255});
                     }
                 }
 
                 pr::PrimEnd();
             }
+
+
+            // Scene AABB
+            minimum_lbvh::AABB sceneAABB;
+            sceneAABB.setEmpty();
+
+            for (auto tri : triangles)
+            {
+                for (int j = 0; j < 3; ++j)
+                {
+                    sceneAABB.extend(tri.vs[j]);
+                }
+            }
+            DrawAABB(to(sceneAABB.lower), to(sceneAABB.upper), { 255, 255, 255 });
 
             std::vector<uint64_t> mortons;
         });

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "helper_math.h"
+
 #if ( defined( __CUDACC__ ) || defined( __HIPCC__ ) )
 #define MINIMUM_LBVH_KERNELCC
 #endif
@@ -11,106 +13,26 @@
 
 namespace minimum_lbvh
 {
-	template <class T>
-	inline T ss_max(T x, T y)
+	inline float remap(float value, float inputMin, float inputMax, float outputMin, float outputMax)
 	{
-		return (x < y) ? y : x;
+		return (value - inputMin) * ((outputMax - outputMin) / (inputMax - inputMin)) + outputMin;
+	}
+	inline float compMin(float3 v)
+	{
+		return fminf(fminf(v.x, v.y), v.z);
+	}
+	inline float compMax(float3 v)
+	{
+		return fmaxf(fmaxf(v.x, v.y), v.z);
 	}
 
-	template <class T>
-	inline T ss_min(T x, T y)
+	inline float2 slabs(float3 ro, float3 one_over_rd, float3 lower, float3 upper)
 	{
-		return (y < x) ? y : x;
-	}
-	template <class T>
-	inline T ss_clamp(T x, T lower, T upper)
-	{
-		return ss_min(ss_max(x, lower), upper);
-	}
-	struct Vec2
-	{
-		float xs[2];
-		float& operator[](int i) { return xs[i]; }
-		const float& operator[](int i) const { return xs[i]; }
-	};
-	struct Vec3
-	{
-		float xs[3];
-		float& operator[](int i) { return xs[i]; }
-		const float& operator[](int i) const { return xs[i]; }
-	};
+		float3 t0 = (lower - ro) * one_over_rd;
+		float3 t1 = (upper - ro) * one_over_rd;
 
-	inline Vec3 operator-(Vec3 a, Vec3 b)
-	{
-		Vec3 r;
-		for (int i = 0; i < 3; i++)
-		{
-			r[i] = a[i] - b[i];
-		}
-		return r;
-	}
-	inline Vec3 operator+(Vec3 a, Vec3 b)
-	{
-		Vec3 r;
-		for (int i = 0; i < 3; i++)
-		{
-			r[i] = a[i] + b[i];
-		}
-		return r;
-	}
-	inline Vec3 operator*(Vec3 a, float s)
-	{
-		Vec3 r;
-		for (int i = 0; i < 3; i++)
-		{
-			r[i] = a[i] * s;
-		}
-		return r;
-	}
-	inline Vec3 operator*(Vec3 a, Vec3 b)
-	{
-		Vec3 r;
-		for (int i = 0; i < 3; i++)
-		{
-			r[i] = a[i] * b[i];
-		}
-		return r;
-	}
-
-	inline Vec3 ss_min(Vec3 a, Vec3 b)
-	{
-		Vec3 r;
-		for (int axis = 0; axis < 3; axis++)
-		{
-			r[axis] = ss_min(a[axis], b[axis]);
-		}
-		return r;
-	}
-	inline Vec3 ss_max(Vec3 a, Vec3 b)
-	{
-		Vec3 r;
-		for (int axis = 0; axis < 3; axis++)
-		{
-			r[axis] = ss_max(a[axis], b[axis]);
-		}
-		return r;
-	}
-	inline float compMin(Vec3 v)
-	{
-		return ss_min(ss_min(v[0], v[1]), v[2]);
-	}
-	inline float compMax(Vec3 v)
-	{
-		return ss_max(ss_max(v[0], v[1]), v[2]);
-	}
-
-	inline Vec2 slabs(Vec3 ro, Vec3 one_over_rd, Vec3 lower, Vec3 upper)
-	{
-		Vec3 t0 = (lower - ro) * one_over_rd;
-		Vec3 t1 = (upper - ro) * one_over_rd;
-
-		Vec3 tmin = ss_min(t0, t1);
-		Vec3 tmax = ss_max(t0, t1);
+		float3 tmin = fminf(t0, t1);
+		float3 tmax = fmaxf(t0, t1);
 		float region_min = compMax(tmin);
 		float region_max = compMin(tmax);
 
@@ -119,77 +41,47 @@ namespace minimum_lbvh
 		return { region_min, region_max };
 	}
 
-	inline float dot(Vec3 a, Vec3 b)
-	{
-		float r = 0.0f;
-		for (int axis = 0; axis < 3; axis++)
-		{
-			r += a[axis] * b[axis];
-		}
-		return r;
-	}
-
-	inline Vec3 cross(Vec3 a, Vec3 b)
-	{
-		return {
-			a[1] * b[2] - b[1] * a[2],
-			a[2] * b[0] - b[2] * a[0],
-			a[0] * b[1] - b[0] * a[1]
-		};
-	}
-
 	struct Triangle
 	{
-		Vec3 vs[3];
+		float3 vs[3];
 	};
 
 	struct AABB
 	{
-		Vec3 lower;
-		Vec3 upper;
+		float3 lower;
+		float3 upper;
 
 		void setEmpty()
 		{
-			for (int i = 0; i < 3; i++)
-			{
-				lower[i] = +FLT_MAX;
-				upper[i] = -FLT_MAX;
-			}
+			lower = make_float3(+FLT_MAX);
+			upper = make_float3(-FLT_MAX);
 		}
-		void extend(const Vec3& p)
+		void extend(const float3& p)
 		{
-			for (int i = 0; i < 3; i++)
-			{
-				lower[i] = ss_min(lower[i], p[i]);
-				upper[i] = ss_max(upper[i], p[i]);
-			}
+			lower = fminf(lower, p);
+			upper = fmaxf(upper, p);
 		}
 
 		void extend(const AABB& b)
 		{
-			for (int i = 0; i < 3; i++)
-			{
-				lower[i] = ss_min(lower[i], b.lower[i]);
-				upper[i] = ss_max(upper[i], b.upper[i]);
-			}
+			lower = fminf(lower, b.lower);
+			upper = fmaxf(upper, b.upper);
 		}
 		float surface_area() const
 		{
-			Vec3 size = upper - lower;
-			return (size[0] * size[1] + size[1] * size[2] + size[2] * size[0]) * 2.0f;
+			float3 size = upper - lower;
+			return (size.x * size.y + size.y * size.z + size.z * size.x) * 2.0f;
 		}
 
-		bool isEmpty()
-		{
-			for (int i = 0; i < 3; i++)
-			{
-				if (upper[i] <= lower[i])
-				{
-					return true;
-				}
-			}
-			return false;
-		}
+		//uint64_t encodeMortonCode(float3 p) const
+		//{
+		//	uint32_t coord[3];
+		//	for (int i = 0; i < 3; i++)
+		//	{
+		//		int v = (int)remap(p[i], lower[i], upper[i], 0, MORTON_MAX_VALUE_3D + 1);
+		//		coord[i] = (uint32_t)clamp(v, 0, MORTON_MAX_VALUE_3D);
+		//	}
+		//}
 	};
 
 	struct NodeIndex
@@ -205,11 +97,6 @@ namespace minimum_lbvh
 		NodeIndex parent;
 		NodeIndex children[2];
 	};
-
-	inline float remap(float value, float inputMin, float inputMax, float outputMin, float outputMax)
-	{
-		return (value - inputMin) * ((outputMax - outputMin) / (inputMax - inputMin)) + outputMin;
-	}
 
 	// Return the number of consecutive high-order zero bits in a 32-bit integer
 	inline int clz(uint32_t x)
