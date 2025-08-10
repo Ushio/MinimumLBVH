@@ -13,6 +13,16 @@
 
 namespace minimum_lbvh
 {
+	template <class T>
+	inline T ss_max(T x, T y)
+	{
+		return (x < y) ? y : x;
+	}
+	template <class T>
+	inline T ss_min(T x, T y)
+	{
+		return (y < x) ? y : x;
+	}
 	inline float remap(float value, float inputMin, float inputMax, float outputMin, float outputMax)
 	{
 		return (value - inputMin) * ((outputMax - outputMin) / (inputMax - inputMin)) + outputMin;
@@ -200,9 +210,13 @@ namespace minimum_lbvh
 		uint32_t m_isLeaf : 1;
 	};
 
-	struct LBVHNode
+	struct InternalNode
 	{
 		NodeIndex parent;
 		NodeIndex children[2];
+	};
+	struct Stat
+	{
+		uint32_t oneOfEdges;
 	};
 }

@@ -30,13 +30,13 @@ void runToyExample()
         deltas[i] = minimum_lbvh::delta(mortons[i], mortons[i + 1]);
     }
 
-    std::vector<uint32_t> stats(mortons.size() - 1);
+    std::vector<minimum_lbvh::Stat> stats(mortons.size() - 1);
     for (int i = 0; i < stats.size(); i++)
     {
-        stats[i] = 0xFFFFFFFF;
+        stats[i].oneOfEdges = 0xFFFFFFFF;
     }
 
-    std::vector<minimum_lbvh::LBVHNode> internals;
+    std::vector<minimum_lbvh::InternalNode> internals;
     internals.resize(mortons.size() - 1);
 
     std::stringstream ss;
@@ -73,21 +73,15 @@ void runToyExample()
             ss << "    " << parent << " -> " << (node.m_isLeaf ? "L" : "") << node.m_index << "\n";
 
             uint32_t index = isLeft ? leaf_upper : leaf_lower;
-            std::swap(stats[parent], index);
+            std::swap(stats[parent].oneOfEdges, index);
 
             if (index == 0xFFFFFFFF)
             {
                 break;
             }
 
-            if (leaf_upper < index)
-            {
-                leaf_upper = index;
-            }
-            else
-            {
-                leaf_lower = index;
-            }
+            leaf_lower = minimum_lbvh::ss_min(leaf_lower, index);
+            leaf_upper = minimum_lbvh::ss_max(leaf_upper, index);
 
             node = minimum_lbvh::NodeIndex(parent, false);
         }
