@@ -274,13 +274,25 @@ void intersect_stackfree(
 {
     bool decent = true;
     minimum_lbvh::NodeIndex curr_node = node;
-    minimum_lbvh::NodeIndex prev_node(0x7FFFFFFF, true);
+    minimum_lbvh::NodeIndex prev_node(0x7FFFFFFF, false);
 
-    for (;;)
+    while(curr_node.m_index != 0x7FFFFFFF)
     {
         if (curr_node.m_isLeaf)
         {
-            // TODO
+            float t;
+            float u, v;
+            float3 ng;
+            const minimum_lbvh::Triangle& tri = triangles[curr_node.m_index];
+            if (minimum_lbvh::intersect_ray_triangle(&t, &u, &v, &ng, 0.0f, hit->t, ro, rd, tri.vs[0], tri.vs[1], tri.vs[2]))
+            {
+                hit->t = t;
+                hit->triangleIndex = curr_node.m_index;
+                hit->ng = ng;
+            }
+
+            std::swap(curr_node, prev_node);
+            decent = false;
             continue;
         }
 
@@ -288,36 +300,53 @@ void intersect_stackfree(
         minimum_lbvh::AABB R = nodes[curr_node.m_index].aabbs[1];
         float2 rangeL = minimum_lbvh::slabs(ro, one_over_rd, L.lower, L.upper);
         float2 rangeR = minimum_lbvh::slabs(ro, one_over_rd, R.lower, R.upper);
+        bool hitL = rangeL.x <= rangeL.y;
+        bool hitR = rangeR.x <= rangeR.y;
+
+        minimum_lbvh::NodeIndex parent_node = nodes[curr_node.m_index].parent;
+        minimum_lbvh::NodeIndex near_node = nodes[curr_node.m_index].children[0];
+        minimum_lbvh::NodeIndex far_node  = nodes[curr_node.m_index].children[1];
+
+        int nHits = 0;
+        if (hitL && hitR)
+        {
+            if (rangeR.x < rangeL.x)
+            {
+                std::swap(near_node, far_node);
+            }
+            nHits = 2;
+        }
+        else if (hitL || hitR)
+        {
+            nHits = 1;
+            if (hitR)
+            {
+                std::swap(near_node, far_node);
+            }
+        }
+
+        minimum_lbvh::NodeIndex next_node;
+        if (nHits == 0)
+        {
+            next_node = parent_node;
+        }
+        else if (decent)
+        {
+            next_node = near_node;
+        }
+        else if (prev_node == near_node)
+        {
+            next_node = nHits == 2 ? far_node : parent_node;
+        }
+        else
+        {
+            next_node = parent_node;
+        }
+
+        decent = !(next_node == parent_node);
+        prev_node = curr_node;
+        curr_node = next_node;
     }
-
-    //if (node.m_isLeaf)
-    //{
-    //    float t;
-    //    float u, v;
-    //    float3 ng;
-    //    const minimum_lbvh::Triangle& tri = triangles[node.m_index];
-    //    if (minimum_lbvh::intersect_ray_triangle(&t, &u, &v, &ng, 0.0f, hit->t, ro, rd, tri.vs[0], tri.vs[1], tri.vs[2]))
-    //    {
-    //        hit->t = t;
-    //        hit->triangleIndex = node.m_index;
-    //        hit->ng = ng;
-    //    }
-    //    return;
-    //}
-
-    //const minimum_lbvh::AABB& L = nodes[node.m_index].aabbs[0];
-    //const minimum_lbvh::AABB& R = nodes[node.m_index].aabbs[1];
-
-    //float2 rangeL = minimum_lbvh::slabs(ro, one_over_rd, L.lower, L.upper, hit->t);
-    //float2 rangeR = minimum_lbvh::slabs(ro, one_over_rd, R.lower, R.upper, hit->t);
-    //if (rangeL.x <= rangeL.y)
-    //{
-    //    intersect(hit, nodes, triangles, nodes[node.m_index].children[0], ro, rd, one_over_rd);
-    //}
-    //if (rangeR.x <= rangeR.y)
-    //{
-    //    intersect(hit, nodes, triangles, nodes[node.m_index].children[1], ro, rd, one_over_rd);
-    //}
 }
 
 
@@ -399,7 +428,7 @@ int main() {
     Initialize(config);
 
     Camera3D camera;
-    camera.origin = { 0, 0, 4 };
+    camera.origin = { 1.5f, 1.5f, 1.5f };
     camera.lookat = { 0, 0, 0 };
 
     SetDataDir(ExecutableDir());
@@ -407,6 +436,7 @@ int main() {
     std::shared_ptr<FScene> scene = ReadWavefrontObj(GetDataPath("test.obj"), err);
 
     double e = GetElapsedTime();
+    bool showWire = false;
 
     runToyExample();
 
@@ -467,7 +497,7 @@ int main() {
                 indexBase += nVerts;
             }
 
-            //if (showWire)
+            if (showWire)
             {
                 pr::PrimBegin(pr::PrimitiveMode::Lines);
 
@@ -603,6 +633,7 @@ int main() {
                     if (isRoot)
                     {
                         rootNode = node;
+                        internals[rootNode.m_index].parent = minimum_lbvh::NodeIndex(0x7FFFFFFF, false);
                     }
                 }
 
@@ -720,7 +751,7 @@ int main() {
                 rayGenerator.shoot(&ro, &rd, i, j, 0.5f, 0.5f);
 
                 Hit hit;
-                intersect(&hit, internals.data(), sorted_triangles.data(), rootNode, to(ro), to(rd), invRd(to(rd)));
+                intersect_stackfree(&hit, internals.data(), sorted_triangles.data(), rootNode, to(ro), to(rd), invRd(to(rd)));
                 if (hit.t != FLT_MAX)
                 {
                     float3 n = normalize(hit.ng);
@@ -744,6 +775,7 @@ int main() {
         ImGui::SetNextWindowSize({ 500, 800 }, ImGuiCond_Once);
         ImGui::Begin("Panel");
         ImGui::Text("fps = %f", GetFrameRate());
+        ImGui::Checkbox("showWire", &showWire);
         ImGui::InputInt("debug index", &g_debug_index);
 
         ImGui::End();

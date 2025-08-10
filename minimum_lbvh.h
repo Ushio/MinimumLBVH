@@ -210,6 +210,15 @@ namespace minimum_lbvh
 		uint32_t m_isLeaf : 1;
 	};
 
+	inline bool operator==(NodeIndex a, NodeIndex b)
+	{
+		uint32_t aBits;
+		uint32_t bBits;
+		memcpy(&aBits, &a, sizeof(uint32_t));
+		memcpy(&bBits, &b, sizeof(uint32_t));
+		return aBits == bBits;
+	}
+
 	struct InternalNode
 	{
 		NodeIndex parent;
