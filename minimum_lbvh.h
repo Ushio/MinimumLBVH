@@ -55,12 +55,7 @@ namespace minimum_lbvh
 	inline int clz(uint32_t x)
 	{
 #if !defined( MINIMUM_LBVH_KERNELCC )
-		unsigned long scan;
-		if (_BitScanReverse(&scan, x) == 0)
-		{
-			return 32;
-		}
-		return 31 - scan;
+		return __lzcnt(x);
 #else
 		return __clz(x);
 #endif
@@ -68,12 +63,7 @@ namespace minimum_lbvh
 	inline int clz64(uint64_t x)
 	{
 #if !defined( MINIMUM_LBVH_KERNELCC )
-		unsigned long scan;
-		if (_BitScanReverse64(&scan, x) == 0)
-		{
-			return 64;
-		}
-		return 63 - scan;
+		return _lzcnt_u64(x);
 #else
 		return __clzll(x);
 #endif
@@ -82,24 +72,22 @@ namespace minimum_lbvh
 	// Find the position of the least significant bit set to 1
 	inline int ffs(uint32_t x) {
 #if !defined( MINIMUM_LBVH_KERNELCC )
-		unsigned long scan;
-		if (_BitScanForward(&scan, x) == 0)
+		if (x == 0)
 		{
 			return 0;
 		}
-		return scan + 1;
+		return _tzcnt_u32(x) + 1;
 #else
 		return __ffs(x);
 #endif
 	}
 	inline int ffs64(uint64_t x) {
 #if !defined( MINIMUM_LBVH_KERNELCC )
-		unsigned long scan;
-		if (_BitScanForward64(&scan, x) == 0)
+		if (x == 0)
 		{
 			return 0;
 		}
-		return scan + 1;
+		return _tzcnt_u64(x) + 1;
 #else
 		return __ffsll(x);
 #endif
