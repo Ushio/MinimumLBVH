@@ -36,7 +36,7 @@ namespace minimum_lbvh
 		return fmaxf(fmaxf(v.x, v.y), v.z);
 	}
 
-	inline float2 slabs(float3 ro, float3 one_over_rd, float3 lower, float3 upper)
+	inline float2 slabs(float3 ro, float3 one_over_rd, float3 lower, float3 upper )
 	{
 		float3 t0 = (lower - ro) * one_over_rd;
 		float3 t1 = (upper - ro) * one_over_rd;
@@ -44,7 +44,7 @@ namespace minimum_lbvh
 		float3 tmin = fminf(t0, t1);
 		float3 tmax = fmaxf(t0, t1);
 		float region_min = compMax(tmin);
-		float region_max = compMin(tmax);
+		float region_max = compMin(tmax) * 1.00000024f; // Robust BVH Ray Traversal- revised
 
 		region_min = fmaxf(region_min, 0.0f);
 
