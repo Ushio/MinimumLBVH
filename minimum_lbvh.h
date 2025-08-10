@@ -220,4 +220,42 @@ namespace minimum_lbvh
 	{
 		uint32_t oneOfEdges;
 	};
+
+	inline bool intersect_ray_triangle(float* tOut, float* uOut, float* vOut, float3* ngOut, float t_min, float t_max, float3 ro, float3 rd, float3 v0, float3 v1, float3 v2 )
+	{
+		float3 e0 = v1 - v0;
+		float3 e1 = v2 - v1;
+		float3 ng = cross(e0, e1);
+
+		float t = dot(v0 - ro, ng) / dot(ng, rd);
+		if (t_min <= t && t <= t_max)
+		{
+			float3 e2 = v0 - v2;
+			float3 p = ro + rd * t;
+
+			float n2TriArea0 = dot(ng, cross(e0, p - v0));  // |n| * 2 * tri_area( p, v0, v1 )
+			float n2TriArea1 = dot(ng, cross(e1, p - v1));  // |n| * 2 * tri_area( p, v1, v2 )
+			float n2TriArea2 = dot(ng, cross(e2, p - v2));  // |n| * 2 * tri_area( p, v2, v0 )
+
+			if (n2TriArea0 < 0.0f || n2TriArea1 < 0.0f || n2TriArea2 < 0.0f)
+			{
+				return false;
+			}
+
+			float n2TriArea = n2TriArea0 + n2TriArea1 + n2TriArea2;  // |n| * 2 * tri_area( v0, v1, v2 )
+
+			// Barycentric Coordinates
+			float bW = n2TriArea0 / n2TriArea;  // tri_area( p, v0, v1 ) / tri_area( v0, v1, v2 )
+			float bU = n2TriArea1 / n2TriArea;  // tri_area( p, v1, v2 ) / tri_area( v0, v1, v2 )
+			float bV = n2TriArea2 / n2TriArea;  // tri_area( p, v2, v0 ) / tri_area( v0, v1, v2 )
+
+			*tOut = t;
+			*uOut = bV;
+			*vOut = bW;
+			*ngOut = ng;
+			return true;
+		}
+
+		return false;
+	}
 }
