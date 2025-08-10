@@ -17,6 +17,46 @@ inline float3 to(glm::vec3 p)
     return { p.x, p.y, p.z };
 }
 
+void printTree(const minimum_lbvh::InternalNode* nodes, minimum_lbvh::NodeIndex node)
+{
+    std::stringstream ss;
+    ss << "digraph Tree {\n";
+    ss << "    node [shape=circle];\n";
+
+    uint32_t maxLeaf = 0;
+    std::stack<minimum_lbvh::NodeIndex> stack;
+    stack.push(node);
+    while (!stack.empty())
+    {
+        minimum_lbvh::NodeIndex cur = stack.top();
+        stack.pop();
+
+        if (cur.m_isLeaf)
+        {
+            maxLeaf = minimum_lbvh::ss_max(maxLeaf, cur.m_index);
+        }
+        else
+        {
+            minimum_lbvh::NodeIndex L = nodes[cur.m_index].children[0];
+            minimum_lbvh::NodeIndex R = nodes[cur.m_index].children[1];
+            stack.push(L);
+            stack.push(R);
+
+            ss << "    " << cur.m_index << " -> " << (L.m_isLeaf ? "L" : "") << L.m_index << "\n";
+            ss << "    " << cur.m_index << " -> " << (R.m_isLeaf ? "L" : "") << R.m_index << "\n";
+        }
+    }
+    ss << "    { rank = same; ";
+    for (uint32_t i_leaf = 0; i_leaf <= maxLeaf; i_leaf++)
+    {
+        ss << "L" << i_leaf << "; ";
+    }
+    ss << "}\n";
+
+    ss << "}\n";
+    printf("%s", ss.str().c_str());
+}
+
 void runToyExample()
 {
     std::vector<uint32_t> mortons = {
@@ -42,12 +82,9 @@ void runToyExample()
         stats[i].oneOfEdges = 0xFFFFFFFF;
     }
 
+    minimum_lbvh::NodeIndex rootNode;
     std::vector<minimum_lbvh::InternalNode> internals;
     internals.resize(mortons.size() - 1);
-
-    std::stringstream ss;
-    ss << "digraph Tree {\n";
-    ss << "    node [shape=circle];\n";
 
     for (uint32_t i_leaf = 0; i_leaf < mortons.size(); i_leaf++)
     {
@@ -55,6 +92,7 @@ void runToyExample()
         uint32_t leaf_upper = i_leaf;
         minimum_lbvh::NodeIndex node(i_leaf, true);
 
+        bool isRoot = true;
         while (leaf_upper - leaf_lower < internals.size())
         {
             // direction from bottom
@@ -76,13 +114,12 @@ void runToyExample()
 
             internals[parent].children[goLeft] = node;
 
-            ss << "    " << parent << " -> " << (node.m_isLeaf ? "L" : "") << node.m_index << "\n";
-
             uint32_t index = goLeft ? leaf_upper : leaf_lower;
             std::swap(stats[parent].oneOfEdges, index);
 
             if (index == 0xFFFFFFFF)
             {
+                isRoot = false;
                 break;
             }
 
@@ -91,17 +128,14 @@ void runToyExample()
 
             node = minimum_lbvh::NodeIndex(parent, false);
         }
+
+        if (isRoot)
+        {
+            rootNode = node;
+        }
     }
 
-    ss << "    { rank = same; ";
-    for (uint32_t i_leaf = 0; i_leaf < mortons.size(); i_leaf++)
-    {
-        ss << "L" << i_leaf << "; ";
-    }
-    ss << "}\n";
-
-    ss << "}\n";
-    printf("%s", ss.str().c_str());
+    printTree(internals.data(), rootNode);
 
     for (int i = 0; i < internals.size(); i++)
     {
@@ -374,9 +408,8 @@ int main() {
                 pr::PrimEnd();
             }
 
-            //if (internals.empty())
+            if (internals.empty())
             {
-                // printf("build\n");
 #if 1
                 internals.clear();
                 internals.resize(triangles.size() - 1);
@@ -496,6 +529,7 @@ int main() {
                     }
                 }
 
+                // printTree(internals.data(), rootNode);
 #if 1
                 // Validation - delta under the internal node must less or eq of the split.
                 for (int i = 0; i < internals.size(); i++)
