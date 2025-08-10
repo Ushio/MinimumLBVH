@@ -374,10 +374,11 @@ int main() {
                 pr::PrimEnd();
             }
 
-            if (internals.empty())
+            //if (internals.empty())
             {
                 // printf("build\n");
-#if 0
+#if 1
+                internals.clear();
                 internals.resize(triangles.size() - 1);
                 sorted_triangles.resize(triangles.size());
 
@@ -402,24 +403,25 @@ int main() {
                     float3 center = (tri.vs[0] + tri.vs[1] + tri.vs[2]) / 3.0f;
                     mortons[i] = sceneAABB.encodeMortonCode(center);
                     triangleIndices[i] = i;
+
+                    // DrawSphere(to(center), 0.04f, { 255, 0, 0 });
                 }
 
                 std::sort(triangleIndices.begin(), triangleIndices.end(), [&mortons](uint32_t a, uint32_t b) {
                     return mortons[a] < mortons[b];
                 });
 
-                std::vector<uint64_t> sorted_mortons(mortons.size());
-            
-                for (int i = 0; i < sorted_mortons.size(); i++)
+                for (int i = 0; i < triangles.size(); i++)
                 {
-                    sorted_mortons[i] = mortons[triangleIndices[i]];
                     sorted_triangles[i] = triangles[triangleIndices[i]];
                 }
 
-                std::vector<uint8_t> deltas(sorted_mortons.size() - 1);
+                std::vector<uint8_t> deltas(mortons.size() - 1);
                 for (int i = 0; i < deltas.size(); i++)
                 {
-                    deltas[i] = minimum_lbvh::delta(mortons[i], mortons[i + 1]);
+                    uint64_t mA = mortons[triangleIndices[i]];
+                    uint64_t mB = mortons[triangleIndices[i + 1]];
+                    deltas[i] = minimum_lbvh::delta(mA, mB);
                 }
 
                 std::vector<minimum_lbvh::Stat> stats(mortons.size() - 1);
@@ -557,7 +559,7 @@ int main() {
                     prim.primID = i;
                     primitives[i] = prim;
                 }
-
+                
                 // allocation
                 internals.resize(triangles.size() - 1);
                 sorted_triangles = triangles;
@@ -590,6 +592,8 @@ int main() {
 #endif
             }
         });
+
+        //traverse(internals.data(), rootNode, 0);
 
         int stride = 2;
         Image2DRGBA8 image;
