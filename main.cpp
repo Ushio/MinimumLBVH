@@ -212,6 +212,72 @@ void intersect(
     }
 }
 
+// embree
+struct EmbreeBVHContext
+{
+    EmbreeBVHContext() {
+        nodes = 0;
+        nodeHead = 0;
+    }
+    minimum_lbvh::InternalNode* nodes;
+    std::atomic<int> nodeHead;
+};
+
+inline void* node2ptr(minimum_lbvh::NodeIndex node)
+{
+    uint32_t data;
+    memcpy(&data, &node, sizeof(uint32_t));
+    return (char*)0 + data;
+}
+inline minimum_lbvh::NodeIndex ptr2node(void* ptr)
+{
+    uint32_t data = (char*)ptr - (char*)0;
+    minimum_lbvh::NodeIndex node;
+    memcpy(&node, &data, sizeof(uint32_t));
+    return node;
+}
+
+static void* embrreeCreateNode(RTCThreadLocalAllocator alloc, unsigned int numChildren, void* userPtr)
+{
+    PR_ASSERT(numChildren == 2);
+
+    EmbreeBVHContext* context = (EmbreeBVHContext*)userPtr;
+    int index = context->nodeHead++;
+
+    minimum_lbvh::NodeIndex node(index, false);
+    return node2ptr(node);
+}
+static void embreeSetNodeChildren(void* nodePtr, void** childPtr, unsigned int numChildren, void* userPtr)
+{
+    PR_ASSERT(numChildren == 2);
+
+    EmbreeBVHContext* context = (EmbreeBVHContext*)userPtr;
+    minimum_lbvh::InternalNode& node = context->nodes[ptr2node(nodePtr).m_index];
+    for (int i = 0; i < numChildren; i++)
+    {
+        node.children[i] = ptr2node(childPtr[i]);
+    }
+}
+static void embreeSetNodeBounds(void* nodePtr, const RTCBounds** bounds, unsigned int numChildren, void* userPtr)
+{
+    PR_ASSERT(numChildren == 2);
+
+    EmbreeBVHContext* context = (EmbreeBVHContext*)userPtr;
+    minimum_lbvh::InternalNode& node = context->nodes[ptr2node(nodePtr).m_index];
+    
+    for (int i = 0; i < numChildren; i++)
+    {
+        node.aabbs[i].lower = make_float3(bounds[i]->lower_x, bounds[i]->lower_y, bounds[i]->lower_z);
+        node.aabbs[i].upper = make_float3(bounds[i]->upper_x, bounds[i]->upper_y, bounds[i]->upper_z);
+    }
+}
+static void* embreeCreateLeaf(RTCThreadLocalAllocator alloc, const RTCBuildPrimitive* prims, size_t numPrims, void* userPtr)
+{
+    PR_ASSERT(numPrims == 1);
+    minimum_lbvh::NodeIndex node(prims->primID, true /*is leaf*/);
+    return node2ptr(node);
+}
+
 int main() {
     using namespace pr;
 
@@ -311,7 +377,7 @@ int main() {
             if (internals.empty())
             {
                 // printf("build\n");
-#if 1
+#if 0
                 internals.resize(triangles.size() - 1);
                 sorted_triangles.resize(triangles.size());
 
@@ -467,51 +533,60 @@ int main() {
                     }
                 }
 #endif
-
+                // triangles
 #else
-                //embreeBVH->device = decltype(embreeBVH->device)(rtcNewDevice(""), rtcReleaseDevice);
-                //embreeBVH->bvh = decltype(embreeBVH->bvh)(rtcNewBVH(embreeBVH->device.get()), rtcReleaseBVH);
+                RTCDevice device = rtcNewDevice("");
+                RTCBVH bvh = rtcNewBVH(device);
 
-                //std::vector<RTCBuildPrimitive> primitives;
-                //primitives.reserve(indices.size() / 3);
+                std::vector<RTCBuildPrimitive> primitives(triangles.size());
+                for (int i = 0; i < triangles.size(); i++)
+                {
+                    minimum_lbvh::AABB aabb; aabb.setEmpty();
+                    for (auto v : triangles[i].vs)
+                    {
+                        aabb.extend(v);
+                    }
+                    RTCBuildPrimitive prim = {};
+                    prim.lower_x = aabb.lower.x;
+                    prim.lower_y = aabb.lower.y;
+                    prim.lower_z = aabb.lower.z;
+                    prim.geomID = 0;
+                    prim.upper_x = aabb.upper.x;
+                    prim.upper_y = aabb.upper.y;
+                    prim.upper_z = aabb.upper.z;
+                    prim.primID = i;
+                    primitives[i] = prim;
+                }
 
-                //for (int i = 0; i < indices.size(); i += 3) {
-                //    glm::vec3 min_value(FLT_MAX);
-                //    glm::vec3 max_value(-FLT_MAX);
-                //    for (int index : { indices[i], indices[i + 1], indices[i + 2] }) {
-                //        auto P = points[index];
-                //        min_value = glm::min(min_value, P);
-                //        max_value = glm::max(max_value, P);
-                //    }
-                //    RTCBuildPrimitive prim = {};
-                //    prim.lower_x = min_value.x;
-                //    prim.lower_y = min_value.y;
-                //    prim.lower_z = min_value.z;
-                //    prim.geomID = 0;
-                //    prim.upper_x = max_value.x;
-                //    prim.upper_y = max_value.y;
-                //    prim.upper_z = max_value.z;
-                //    prim.primID = i / 3;
-                //    primitives.emplace_back(prim);
-                //}
+                // allocation
+                internals.resize(triangles.size() - 1);
+                sorted_triangles = triangles;
 
-                //RTCBuildArguments arguments = rtcDefaultBuildArguments();
-                //arguments.byteSize = sizeof(arguments);
-                //arguments.buildQuality = RTC_BUILD_QUALITY_HIGH;
-                //arguments.maxBranchingFactor = 2;
-                //arguments.bvh = embreeBVH->bvh.get();
-                //arguments.primitives = primitives.data();
-                //arguments.primitiveCount = primitives.size();
-                //arguments.primitiveArrayCapacity = primitives.capacity();
-                //arguments.minLeafSize = 1;
-                //arguments.maxLeafSize = 5;
-                //arguments.createNode = create_branch;
-                //arguments.setNodeChildren = set_children_to_branch;
-                //arguments.setNodeBounds = set_branch_bounds;
-                //arguments.createLeaf = create_leaf;
-                //arguments.splitPrimitive = nullptr;
-                //embreeBVH->bvh_root = (BVHNode*)rtcBuildBVH(&arguments);
-                //return embreeBVH;
+                EmbreeBVHContext context;
+                context.nodes = internals.data();
+
+                RTCBuildArguments arguments = rtcDefaultBuildArguments();
+                arguments.byteSize = sizeof(arguments);
+                arguments.buildQuality = RTC_BUILD_QUALITY_LOW;
+                arguments.maxBranchingFactor = 2;
+                arguments.bvh = bvh;
+                arguments.primitives = primitives.data();
+                arguments.primitiveCount = primitives.size();
+                arguments.primitiveArrayCapacity = primitives.size();
+                arguments.minLeafSize = 1;
+                arguments.maxLeafSize = 1;
+                arguments.createNode = embrreeCreateNode;
+                arguments.setNodeChildren = embreeSetNodeChildren;
+                arguments.setNodeBounds = embreeSetNodeBounds;
+                arguments.createLeaf = embreeCreateLeaf;
+                arguments.splitPrimitive = nullptr;
+                arguments.userPtr = &context;
+                void* bvh_root = rtcBuildBVH(&arguments);
+
+                rtcReleaseBVH(bvh);
+                rtcReleaseDevice(device);
+
+                rootNode = ptr2node(bvh_root);
 #endif
             }
         });
