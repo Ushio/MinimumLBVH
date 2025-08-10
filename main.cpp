@@ -3,8 +3,10 @@
 #include <memory>
 #include <string>
 #include <sstream>
+#include <stack>
 
 #include "minimum_lbvh.h"
+#include <embree4/rtcore.h>
 
 inline glm::vec3 to(float3 p)
 {
@@ -100,6 +102,43 @@ void runToyExample()
 
     ss << "}\n";
     printf("%s", ss.str().c_str());
+
+    for (int i = 0; i < internals.size(); i++)
+    {
+        minimum_lbvh::NodeIndex node(i, false /*is leaf*/);
+
+        int leaf_lower = INT_MAX;
+        int leaf_upper = -1;
+        std::stack<minimum_lbvh::NodeIndex> stack;
+        stack.push(node);
+        while (!stack.empty())
+        {
+            minimum_lbvh::NodeIndex cur = stack.top();
+            stack.pop();
+
+            if (cur.m_isLeaf)
+            {
+                leaf_lower = minimum_lbvh::ss_min(leaf_lower, (int)cur.m_index);
+                leaf_upper = minimum_lbvh::ss_max(leaf_upper, (int)cur.m_index);
+            }
+            else
+            {
+                stack.push(internals[cur.m_index].children[0]);
+                stack.push(internals[cur.m_index].children[1]);
+            }
+        }
+
+        int maxDelta = deltas[i];
+
+        // for all delta under the node
+        for (int j = leaf_lower; j < leaf_upper; j++)
+        {
+            if (maxDelta < deltas[j] )
+            {
+                abort();
+            }
+        }
+    }
 }
 
 int g_debug_index = 0;
@@ -272,7 +311,7 @@ int main() {
             if (internals.empty())
             {
                 // printf("build\n");
-
+#if 1
                 internals.resize(triangles.size() - 1);
                 sorted_triangles.resize(triangles.size());
 
@@ -389,6 +428,91 @@ int main() {
                     }
                 }
 
+#if 1
+                // Validation - delta under the internal node must less or eq of the split.
+                for (int i = 0; i < internals.size(); i++)
+                {
+                    minimum_lbvh::NodeIndex node(i, false /*is leaf*/);
+
+                    int leaf_lower = INT_MAX;
+                    int leaf_upper = -1;
+                    std::stack<minimum_lbvh::NodeIndex> stack;
+                    stack.push(node);
+                    while (!stack.empty())
+                    {
+                        minimum_lbvh::NodeIndex cur = stack.top();
+                        stack.pop();
+
+                        if (cur.m_isLeaf)
+                        {
+                            leaf_lower = minimum_lbvh::ss_min(leaf_lower, (int)cur.m_index);
+                            leaf_upper = minimum_lbvh::ss_max(leaf_upper, (int)cur.m_index);
+                        }
+                        else
+                        {
+                            stack.push(internals[cur.m_index].children[0]);
+                            stack.push(internals[cur.m_index].children[1]);
+                        }
+                    }
+
+                    int maxDelta = deltas[i];
+
+                    // for all delta under the node
+                    for (int j = leaf_lower; j < leaf_upper; j++)
+                    {
+                        if (maxDelta < deltas[j])
+                        {
+                            abort();
+                        }
+                    }
+                }
+#endif
+
+#else
+                //embreeBVH->device = decltype(embreeBVH->device)(rtcNewDevice(""), rtcReleaseDevice);
+                //embreeBVH->bvh = decltype(embreeBVH->bvh)(rtcNewBVH(embreeBVH->device.get()), rtcReleaseBVH);
+
+                //std::vector<RTCBuildPrimitive> primitives;
+                //primitives.reserve(indices.size() / 3);
+
+                //for (int i = 0; i < indices.size(); i += 3) {
+                //    glm::vec3 min_value(FLT_MAX);
+                //    glm::vec3 max_value(-FLT_MAX);
+                //    for (int index : { indices[i], indices[i + 1], indices[i + 2] }) {
+                //        auto P = points[index];
+                //        min_value = glm::min(min_value, P);
+                //        max_value = glm::max(max_value, P);
+                //    }
+                //    RTCBuildPrimitive prim = {};
+                //    prim.lower_x = min_value.x;
+                //    prim.lower_y = min_value.y;
+                //    prim.lower_z = min_value.z;
+                //    prim.geomID = 0;
+                //    prim.upper_x = max_value.x;
+                //    prim.upper_y = max_value.y;
+                //    prim.upper_z = max_value.z;
+                //    prim.primID = i / 3;
+                //    primitives.emplace_back(prim);
+                //}
+
+                //RTCBuildArguments arguments = rtcDefaultBuildArguments();
+                //arguments.byteSize = sizeof(arguments);
+                //arguments.buildQuality = RTC_BUILD_QUALITY_HIGH;
+                //arguments.maxBranchingFactor = 2;
+                //arguments.bvh = embreeBVH->bvh.get();
+                //arguments.primitives = primitives.data();
+                //arguments.primitiveCount = primitives.size();
+                //arguments.primitiveArrayCapacity = primitives.capacity();
+                //arguments.minLeafSize = 1;
+                //arguments.maxLeafSize = 5;
+                //arguments.createNode = create_branch;
+                //arguments.setNodeChildren = set_children_to_branch;
+                //arguments.setNodeBounds = set_branch_bounds;
+                //arguments.createLeaf = create_leaf;
+                //arguments.splitPrimitive = nullptr;
+                //embreeBVH->bvh_root = (BVHNode*)rtcBuildBVH(&arguments);
+                //return embreeBVH;
+#endif
             }
         });
 

@@ -22,9 +22,15 @@ project "main"
     -- Src
     files { "main.cpp" }
 
-    -- UTF8
-    postbuildcommands { 
-        "mt.exe -manifest ../utf8.manifest -outputresource:\"$(TargetDir)$(TargetName).exe\" -nologo"
+    -- Embree
+    libdirs { "libs/embree-4.4.0/lib" }
+    includedirs { "libs/embree-4.4.0/include" }
+    links{
+        "embree4",
+        "tbb12",
+    }
+    postbuildcommands {
+        "{COPYFILE} ../libs/embree-4.4.0/bin/*.dll %{cfg.targetdir}/*.dll",
     }
 
     -- prlib
@@ -64,11 +70,6 @@ project "unittest"
     -- Src
     files { "unittest.cpp", "catch_amalgamated.cpp", "catch_amalgamated.hpp" }
     includedirs { "." }
-
-    -- UTF8
-    postbuildcommands { 
-        "mt.exe -manifest ../utf8.manifest -outputresource:\"$(TargetDir)$(TargetName).exe\" -nologo"
-    }
 
     -- prlib
     -- setup command
