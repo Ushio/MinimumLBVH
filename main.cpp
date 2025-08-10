@@ -210,41 +210,118 @@ void intersect(
     Hit* hit, 
     const minimum_lbvh::InternalNode* nodes, 
     const minimum_lbvh::Triangle* triangles, 
-    minimum_lbvh::NodeIndex node, 
+    minimum_lbvh::NodeIndex rootNode, 
     float3 ro, 
     float3 rd,
     float3 one_over_rd)
 {
-    if (node.m_isLeaf)
+    int sp = 1;
+    minimum_lbvh::NodeIndex stack[64];
+    stack[0] = rootNode;
+
+    while (sp)
     {
-        float t;
-        float u, v;
-        float3 ng;
-        const minimum_lbvh::Triangle& tri = triangles[node.m_index];
-        if (minimum_lbvh::intersect_ray_triangle(&t, &u, &v, &ng, 0.0f, hit->t, ro, rd, tri.vs[0], tri.vs[1], tri.vs[2]))
+        minimum_lbvh::NodeIndex node = stack[--sp];
+
+        if (node.m_isLeaf)
         {
-            hit->t = t;
-            hit->triangleIndex = node.m_index;
-            hit->ng = ng;
+            float t;
+            float u, v;
+            float3 ng;
+            const minimum_lbvh::Triangle& tri = triangles[node.m_index];
+            if (minimum_lbvh::intersect_ray_triangle(&t, &u, &v, &ng, 0.0f, hit->t, ro, rd, tri.vs[0], tri.vs[1], tri.vs[2]))
+            {
+                hit->t = t;
+                hit->triangleIndex = node.m_index;
+                hit->ng = ng;
+            }
+            continue;
         }
-        return;
-    }
 
-    const minimum_lbvh::AABB& L = nodes[node.m_index].aabbs[0];
-    const minimum_lbvh::AABB& R = nodes[node.m_index].aabbs[1];
+        const minimum_lbvh::AABB& L = nodes[node.m_index].aabbs[0];
+        const minimum_lbvh::AABB& R = nodes[node.m_index].aabbs[1];
 
-    float2 rangeL = minimum_lbvh::slabs(ro, one_over_rd, L.lower, L.upper);
-    float2 rangeR = minimum_lbvh::slabs(ro, one_over_rd, R.lower, R.upper);
+        float2 rangeL = minimum_lbvh::slabs(ro, one_over_rd, L.lower, L.upper);
+        float2 rangeR = minimum_lbvh::slabs(ro, one_over_rd, R.lower, R.upper);
+        bool hitL = rangeL.x <= rangeL.y;
+        bool hitR = rangeR.x <= rangeR.y;
 
-    if (rangeL.x <= rangeL.y)
-    {
-        intersect(hit, nodes, triangles, nodes[node.m_index].children[0], ro, rd, one_over_rd);
-    }
-    if (rangeR.x <= rangeR.y)
-    {
-        intersect(hit, nodes, triangles, nodes[node.m_index].children[1], ro, rd, one_over_rd);
+        if (hitL && hitR)
+        {
+            int mask = 0x0;
+            if (rangeR.x < rangeL.x)
+            {
+                mask = 0x1;
+            }
+            stack[sp++] = nodes[node.m_index].children[1 ^ mask];
+            stack[sp++] = nodes[node.m_index].children[0 ^ mask];
+        }
+        else if (hitL || hitR)
+        {
+            stack[sp++] = nodes[node.m_index].children[hitL ? 0 : 1];
+        }
     }
 }
+
+void intersect_stackfree(
+    Hit* hit,
+    const minimum_lbvh::InternalNode* nodes,
+    const minimum_lbvh::Triangle* triangles,
+    minimum_lbvh::NodeIndex node,
+    float3 ro,
+    float3 rd,
+    float3 one_over_rd)
+{
+    bool decent = true;
+    minimum_lbvh::NodeIndex curr_node = node;
+    minimum_lbvh::NodeIndex prev_node(0x7FFFFFFF, true);
+
+    for (;;)
+    {
+        if (curr_node.m_isLeaf)
+        {
+            // TODO
+            continue;
+        }
+
+        minimum_lbvh::AABB L = nodes[curr_node.m_index].aabbs[0];
+        minimum_lbvh::AABB R = nodes[curr_node.m_index].aabbs[1];
+        float2 rangeL = minimum_lbvh::slabs(ro, one_over_rd, L.lower, L.upper);
+        float2 rangeR = minimum_lbvh::slabs(ro, one_over_rd, R.lower, R.upper);
+    }
+
+    //if (node.m_isLeaf)
+    //{
+    //    float t;
+    //    float u, v;
+    //    float3 ng;
+    //    const minimum_lbvh::Triangle& tri = triangles[node.m_index];
+    //    if (minimum_lbvh::intersect_ray_triangle(&t, &u, &v, &ng, 0.0f, hit->t, ro, rd, tri.vs[0], tri.vs[1], tri.vs[2]))
+    //    {
+    //        hit->t = t;
+    //        hit->triangleIndex = node.m_index;
+    //        hit->ng = ng;
+    //    }
+    //    return;
+    //}
+
+    //const minimum_lbvh::AABB& L = nodes[node.m_index].aabbs[0];
+    //const minimum_lbvh::AABB& R = nodes[node.m_index].aabbs[1];
+
+    //float2 rangeL = minimum_lbvh::slabs(ro, one_over_rd, L.lower, L.upper, hit->t);
+    //float2 rangeR = minimum_lbvh::slabs(ro, one_over_rd, R.lower, R.upper, hit->t);
+    //if (rangeL.x <= rangeL.y)
+    //{
+    //    intersect(hit, nodes, triangles, nodes[node.m_index].children[0], ro, rd, one_over_rd);
+    //}
+    //if (rangeR.x <= rangeR.y)
+    //{
+    //    intersect(hit, nodes, triangles, nodes[node.m_index].children[1], ro, rd, one_over_rd);
+    //}
+}
+
+
+
 
 // embree
 struct EmbreeBVHContext
