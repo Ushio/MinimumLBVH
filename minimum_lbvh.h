@@ -214,6 +214,7 @@ namespace minimum_lbvh
 	{
 		NodeIndex parent;
 		NodeIndex children[2];
+		AABB aabbs[2];
 	};
 	struct Stat
 	{

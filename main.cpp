@@ -52,27 +52,27 @@ void runToyExample()
         while (leaf_upper - leaf_lower < internals.size())
         {
             // direction from bottom
-            int isLeft;
+            int goLeft;
             if (leaf_lower == 0)
             {
-                isLeft = 0;
+                goLeft = 0;
             }
             else if (leaf_upper == stats.size())
             {
-                isLeft = 1;
+                goLeft = 1;
             }
             else
             {
-                isLeft = deltas[leaf_lower - 1] < deltas[leaf_upper] ? 1 : 0;
+                goLeft = deltas[leaf_lower - 1] < deltas[leaf_upper] ? 1 : 0;
             }
 
-            int parent = isLeft ? (leaf_lower - 1) : leaf_upper;
+            int parent = goLeft ? (leaf_lower - 1) : leaf_upper;
 
-            internals[parent].children[isLeft] = node;
+            internals[parent].children[goLeft] = node;
 
             ss << "    " << parent << " -> " << (node.m_isLeaf ? "L" : "") << node.m_index << "\n";
 
-            uint32_t index = isLeft ? leaf_upper : leaf_lower;
+            uint32_t index = goLeft ? leaf_upper : leaf_lower;
             std::swap(stats[parent].oneOfEdges, index);
 
             if (index == 0xFFFFFFFF)
@@ -132,6 +132,9 @@ int main() {
 
         DrawGrid(GridAxis::XY, 1.0f, 10, { 128, 128, 128 });
         DrawXYZAxis(1.0f);
+
+        static glm::vec3 test_p;
+        ManipulatePosition(camera, &test_p, 0.3f);
 
         scene->visitPolyMesh([&](std::shared_ptr<const FPolyMeshEntity> polymesh) {
             if (polymesh->visible() == false)
@@ -197,13 +200,124 @@ int main() {
             DrawAABB(to(sceneAABB.lower), to(sceneAABB.upper), { 255, 255, 255 });
 
             std::vector<uint64_t> mortons(triangles.size());
+            std::vector<uint32_t> triangleIndices(triangles.size());
             for (int i = 0; i < triangles.size(); i++)
             {
                 minimum_lbvh::Triangle tri = triangles[i];
                 float3 center = (tri.vs[0] + tri.vs[1] + tri.vs[2]) / 3.0f;
                 mortons[i] = sceneAABB.encodeMortonCode(center);
+                triangleIndices[i] = i;
             }
 
+            std::sort(triangleIndices.begin(), triangleIndices.end(), [&mortons](uint32_t a, uint32_t b) {
+                return mortons[a] < mortons[b];
+            });
+
+            std::vector<uint64_t> sorted_mortons(mortons.size());
+            std::vector<minimum_lbvh::Triangle> sorted_triangles(mortons.size());
+            for (int i = 0; i < sorted_mortons.size(); i++)
+            {
+                sorted_mortons[i] = mortons[triangleIndices[i]];
+                sorted_triangles[i] = triangles[triangleIndices[i]];
+            }
+
+            std::vector<uint8_t> deltas(sorted_mortons.size() - 1);
+            for (int i = 0; i < deltas.size(); i++)
+            {
+                deltas[i] = minimum_lbvh::delta(mortons[i], mortons[i + 1]);
+            }
+
+            std::vector<minimum_lbvh::Stat> stats(mortons.size() - 1);
+            for (int i = 0; i < stats.size(); i++)
+            {
+                stats[i].oneOfEdges = 0xFFFFFFFF;
+            }
+
+            minimum_lbvh::NodeIndex rootNode;
+            std::vector<minimum_lbvh::InternalNode> internals;
+            internals.resize(mortons.size() - 1);
+
+            std::stringstream ss;
+            ss << "digraph Tree {\n";
+            ss << "    node [shape=circle];\n";
+
+            for (uint32_t i_leaf = 0; i_leaf < mortons.size(); i_leaf++)
+            {
+                uint32_t leaf_lower = i_leaf;
+                uint32_t leaf_upper = i_leaf;
+                minimum_lbvh::NodeIndex node(i_leaf, true);
+
+                minimum_lbvh::AABB aabb; aabb.setEmpty();
+                for (auto v : sorted_triangles[i_leaf].vs)
+                {
+                    aabb.extend(v);
+                }
+
+                bool isRoot = true;
+                while (leaf_upper - leaf_lower < internals.size())
+                {
+                    // direction from bottom
+                    int goLeft;
+                    if (leaf_lower == 0)
+                    {
+                        goLeft = 0;
+                    }
+                    else if (leaf_upper == stats.size())
+                    {
+                        goLeft = 1;
+                    }
+                    else
+                    {
+                        goLeft = deltas[leaf_lower - 1] < deltas[leaf_upper] ? 1 : 0;
+                    }
+
+                    int parent = goLeft ? (leaf_lower - 1) : leaf_upper;
+
+                    internals[parent].children[goLeft] = node;
+                    internals[parent].aabbs[goLeft] = aabb;
+                    if (!node.m_isLeaf)
+                    {
+                        internals[node.m_index].parent = minimum_lbvh::NodeIndex(parent, false);
+                    }
+
+                    ss << "    " << parent << " -> " << (node.m_isLeaf ? "L" : "") << node.m_index << "\n";
+
+                    uint32_t index = goLeft ? leaf_upper : leaf_lower;
+
+                    // == memory barrier ==
+
+                    std::swap(stats[parent].oneOfEdges, index);
+
+                    if (index == 0xFFFFFFFF)
+                    {
+                        isRoot = false;
+                        break;
+                    }
+
+                    leaf_lower = minimum_lbvh::ss_min(leaf_lower, index);
+                    leaf_upper = minimum_lbvh::ss_max(leaf_upper, index);
+
+                    node = minimum_lbvh::NodeIndex(parent, false);
+
+                    minimum_lbvh::AABB otherAABB = internals[parent].aabbs[goLeft ^ 0x1];
+                    aabb.extend(otherAABB);
+                }
+
+                if (isRoot)
+                {
+                    rootNode = node;
+                }
+            }
+
+            ss << "    { rank = same; ";
+            for (uint32_t i_leaf = 0; i_leaf < mortons.size(); i_leaf++)
+            {
+                ss << "L" << i_leaf << "; ";
+            }
+            ss << "}\n";
+
+            ss << "}\n";
+            printf("%s", ss.str().c_str());
             printf("");
         });
 
