@@ -436,11 +436,11 @@ int main() {
     Initialize(config);
 
     Camera3D camera;
-    camera.origin = { 1.5f, 1.5f, 1.5f };
+    camera.origin = { 8.0f, 8.0f, 8.0f };
     camera.lookat = { 0, 0, 0 };
 
-    camera.fovy = 0.002f;
-    camera.origin = { 500, 500, 500 };
+    //camera.fovy = 0.002f;
+    //camera.origin = { 500, 500, 500 };
 
     SetDataDir(ExecutableDir());
     std::string err;
@@ -585,6 +585,8 @@ int main() {
                     stats[i].oneOfEdges = 0xFFFFFFFF;
                 }
 
+                Stopwatch sw;
+#if 0
                 for (uint32_t i_leaf = 0; i_leaf < mortons.size(); i_leaf++)
                 {
                     minimum_lbvh::build_lbvh(
@@ -599,6 +601,22 @@ int main() {
                         i_leaf
                     );
                 }
+#else
+                ParallelFor(mortons.size(), [&](int i_leaf) {
+                    minimum_lbvh::build_lbvh(
+                        &rootNode,
+                        internals.data(),
+                        stats.data(),
+                        triangles.data(),
+                        triangles.size(),
+                        sortedTriangleIndices.data(),
+                        deltas.data(),
+                        sceneAABB,
+                        i_leaf
+                    );
+                });
+#endif
+                printf("build %f\n", sw.elapsed());
 
 #if 1
                 // Validation - delta under the internal node must less or eq of the split.
@@ -645,6 +663,10 @@ int main() {
                 RTCDevice device = rtcNewDevice("");
                 RTCBVH bvh = rtcNewBVH(device);
 
+                rtcSetDeviceErrorFunction(device, [](void* userPtr, RTCError code, const char* str) {
+                    printf("Embree Error [%d] %s\n", code, str);
+                }, 0);
+
                 std::vector<RTCBuildPrimitive> primitives(triangles.size());
                 for (int i = 0; i < triangles.size(); i++)
                 {
@@ -667,12 +689,12 @@ int main() {
                 
                 // allocation
                 internals.resize(triangles.size() - 1);
-                sorted_triangles = triangles;
 
                 EmbreeBVHContext context;
                 context.nodes = internals.data();
 
                 RTCBuildArguments arguments = rtcDefaultBuildArguments();
+                arguments.maxDepth = 64;
                 arguments.byteSize = sizeof(arguments);
                 arguments.buildQuality = RTC_BUILD_QUALITY_LOW;
                 arguments.maxBranchingFactor = 2;
@@ -706,15 +728,15 @@ int main() {
 
         CameraRayGenerator rayGenerator(GetCurrentViewMatrix(), GetCurrentProjMatrix(), image.width(), image.height());
 
-        for (int j = 0; j < image.height(); ++j)
-        {
+        //for (int j = 0; j < image.height(); ++j)
+        ParallelFor(image.height(), [&](int j) {
             for (int i = 0; i < image.width(); ++i)
             {
                 glm::vec3 ro, rd;
                 rayGenerator.shoot(&ro, &rd, i, j, 0.5f, 0.5f);
 
                 Hit hit;
-                intersect_stackfree(&hit, internals.data(), triangles.data(), rootNode, to(ro), to(rd), invRd(to(rd)));
+                intersect(&hit, internals.data(), triangles.data(), rootNode, to(ro), to(rd), invRd(to(rd)));
                 if (hit.t != FLT_MAX)
                 {
                     float3 n = normalize(hit.ng);
@@ -735,6 +757,7 @@ int main() {
                 }
             }
         }
+        );
 
         texture->upload(image);
 

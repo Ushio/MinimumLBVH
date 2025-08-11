@@ -6,8 +6,12 @@
 #define MINIMUM_LBVH_KERNELCC
 #endif
 
+#if defined(MINIMUM_LBVH_KERNELCC)
+#else
 #include <stdint.h>
 #include <intrin.h>
+#include <Windows.h>
+#endif
 
 #define MORTON_MAX_VALUE_3D 0x1FFFFF
 
@@ -273,7 +277,9 @@ namespace minimum_lbvh
 
 			// == memory barrier ==
 
-			std::swap(stats[parent].oneOfEdges, index);
+			index = InterlockedExchange( &stats[parent].oneOfEdges, index );
+
+			// == memory barrier ==
 
 			if (index == 0xFFFFFFFF)
 			{
