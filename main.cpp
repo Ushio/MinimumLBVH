@@ -198,8 +198,9 @@ void traverse(const minimum_lbvh::InternalNode* nodes, minimum_lbvh::NodeIndex n
 struct Hit
 {
     float t = FLT_MAX;
-    uint32_t triangleIndex = 0xFFFFFFFF;
+    float2 uv = {};
     float3 ng = {};
+    uint32_t triangleIndex = 0xFFFFFFFF;
 };
 
 inline float3 invRd(float3 rd)
@@ -232,8 +233,9 @@ void intersect(
             if (minimum_lbvh::intersect_ray_triangle(&t, &u, &v, &ng, 0.0f, hit->t, ro, rd, tri.vs[0], tri.vs[1], tri.vs[2]))
             {
                 hit->t = t;
-                hit->triangleIndex = node.m_index;
+                hit->uv = make_float2(u, v);
                 hit->ng = ng;
+                hit->triangleIndex = node.m_index;
             }
             continue;
         }
@@ -437,6 +439,7 @@ int main() {
 
     double e = GetElapsedTime();
     bool showWire = false;
+    bool smooth = false;
 
     runToyExample();
 
@@ -755,6 +758,10 @@ int main() {
                 if (hit.t != FLT_MAX)
                 {
                     float3 n = normalize(hit.ng);
+                    if (smooth)
+                    {
+                        // hit.uv
+                    }
                     float3 color = (n + make_float3(1.0f)) * 0.5f;
                     image(i, j) = { 255 * color.x, 255 * color.y, 255 * color.z, 255 };
                 }
@@ -776,6 +783,7 @@ int main() {
         ImGui::Begin("Panel");
         ImGui::Text("fps = %f", GetFrameRate());
         ImGui::Checkbox("showWire", &showWire);
+        ImGui::Checkbox("smooth", &smooth);
         ImGui::InputInt("debug index", &g_debug_index);
 
         ImGui::End();

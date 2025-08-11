@@ -228,23 +228,37 @@ namespace minimum_lbvh
 		if (t_min <= t && t <= t_max)
 		{
 			float3 e2 = v0 - v2;
-			float3 p = ro + rd * t;
 
-			float n2TriArea0 = dot(ng, cross(e0, p - v0));  // |n| * 2 * tri_area( p, v0, v1 )
-			float n2TriArea1 = dot(ng, cross(e1, p - v1));  // |n| * 2 * tri_area( p, v1, v2 )
-			float n2TriArea2 = dot(ng, cross(e2, p - v2));  // |n| * 2 * tri_area( p, v2, v0 )
+			float3 P0 = v0 - ro;
+			float3 P1 = v1 - ro;
+			float3 P2 = v2 - ro;
 
-			if (n2TriArea0 < 0.0f || n2TriArea1 < 0.0f || n2TriArea2 < 0.0f)
+			// Use tetrahedron volumes in space of 'ro' as the origin. note constant scale will be ignored.
+			//   u_vol * 6 = ( P0 x P2 ) . rd
+			//   v_vol * 6 = ( P1 x P0 ) . rd
+			//   w_vol * 6 = ( P2 x P1 ) . rd
+			// The cross product is unstable when ro is far away.. 
+			// So let's use '2 ( a x b ) = (a - b) x (a + b)'
+			//   u_vol * 12 = ( ( P0 - P2 ) x ( P0 + P2 ) ) . rd
+			//   v_vol * 12 = ( ( P1 - P0 ) x ( P1 + P0 ) ) . rd
+			//   w_vol * 12 = ( ( P2 - P1 ) x ( P2 + P1 ) ) . rd
+			// As u, v, w volume are consistent on the neighbor, it is edge watertight.
+			// Reference: https://github.com/RenderKit/embree/blob/v4.4.0/kernels/geometry/triangle_intersector_pluecker.h#L79-L94
+			float u_vol = dot(cross(e2, P0 + P2), rd);
+			float v_vol = dot(cross(e0, P1 + P0), rd);
+			float w_vol = dot(cross(e1, P2 + P1), rd);
+
+			if (u_vol < 0.0f || v_vol < 0.0f || w_vol < 0.0f)
 			{
 				return false;
 			}
 
-			float n2TriArea = n2TriArea0 + n2TriArea1 + n2TriArea2;  // |n| * 2 * tri_area( v0, v1, v2 )
+			float vol = u_vol + v_vol + w_vol;
 
 			// Barycentric Coordinates
-			float bW = n2TriArea0 / n2TriArea;  // tri_area( p, v0, v1 ) / tri_area( v0, v1, v2 )
-			float bU = n2TriArea1 / n2TriArea;  // tri_area( p, v1, v2 ) / tri_area( v0, v1, v2 )
-			float bV = n2TriArea2 / n2TriArea;  // tri_area( p, v2, v0 ) / tri_area( v0, v1, v2 )
+			float bW = w_vol / vol;
+			float bU = u_vol / vol;
+			float bV = v_vol / vol;
 
 			*tOut = t;
 			*uOut = bV;
