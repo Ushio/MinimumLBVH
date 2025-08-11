@@ -314,24 +314,21 @@ namespace minimum_lbvh
 		{
 			float3 e2 = v0 - v2;
 
-			float3 P0 = v0 - ro;
-			float3 P1 = v1 - ro;
-			float3 P2 = v2 - ro;
-
 			// Use tetrahedron volumes in space of 'ro' as the origin. note constant scale will be ignored.
+			//   P0 = v0 - ro, P1 = v1 - ro, P2 = v2 - ro
 			//   u_vol * 6 = ( P0 x P2 ) . rd
 			//   v_vol * 6 = ( P1 x P0 ) . rd
 			//   w_vol * 6 = ( P2 x P1 ) . rd
 			// The cross product is unstable when ro is far away.. 
 			// So let's use '2 ( a x b ) = (a - b) x (a + b)'
-			//   u_vol * 12 = ( ( P0 - P2 ) x ( P0 + P2 ) ) . rd
-			//   v_vol * 12 = ( ( P1 - P0 ) x ( P1 + P0 ) ) . rd
-			//   w_vol * 12 = ( ( P2 - P1 ) x ( P2 + P1 ) ) . rd
+			//   u_vol * 12 = ( ( P0 - P2 ) x ( P0 + P2 ) ) . rd = ( ( P0 - P2 ) x ( v0 + v2 - ro * 2 ) ) . rd
+			//   v_vol * 12 = ( ( P1 - P0 ) x ( P1 + P0 ) ) . rd = ( ( P1 - P0 ) x ( v1 + v0 - ro * 2 ) ) . rd
+			//   w_vol * 12 = ( ( P2 - P1 ) x ( P2 + P1 ) ) . rd = ( ( P2 - P1 ) x ( v2 + v1 - ro * 2 ) ) . rd
 			// As u, v, w volume are consistent on the neighbor, it is edge watertight.
 			// Reference: https://github.com/RenderKit/embree/blob/v4.4.0/kernels/geometry/triangle_intersector_pluecker.h#L79-L94
-			float u_vol = dot(cross(e2, P0 + P2), rd);
-			float v_vol = dot(cross(e0, P1 + P0), rd);
-			float w_vol = dot(cross(e1, P2 + P1), rd);
+			float u_vol = dot(cross(e2, v0 + v2 - ro * 2.0f), rd);
+			float v_vol = dot(cross(e0, v1 + v0 - ro * 2.0f), rd);
+			float w_vol = dot(cross(e1, v2 + v1 - ro * 2.0f), rd);
 
 			if (u_vol < 0.0f || v_vol < 0.0f || w_vol < 0.0f)
 			{
