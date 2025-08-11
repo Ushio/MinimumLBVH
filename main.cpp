@@ -322,20 +322,13 @@ void intersect_stackfree(
         else if (hitL || hitR)
         {
             nHits = 1;
-            if (hitR)
-            {
-                std::swap(near_node, far_node);
-            }
+            near_node = hitR ? far_node : near_node;
         }
 
         minimum_lbvh::NodeIndex next_node;
-        if (nHits == 0)
+        if (decent)
         {
-            next_node = parent_node;
-        }
-        else if (decent)
-        {
-            next_node = near_node;
+            next_node = 0 < nHits ? near_node : parent_node;
         }
         else if (prev_node == near_node)
         {
@@ -722,7 +715,7 @@ int main() {
 
         //traverse(internals.data(), rootNode, 0);
 
-        int stride = 2;
+        int stride = 4;
         Image2DRGBA8 image;
         image.allocate(GetScreenWidth() / stride, GetScreenHeight() / stride);
 
