@@ -218,6 +218,85 @@ namespace minimum_lbvh
 		uint32_t oneOfEdges;
 	};
 
+	inline void build_lbvh(
+		NodeIndex* rootNode,
+		InternalNode* internals,
+		Stat* stats,
+		const Triangle* triangles,
+		int nTriangles,
+		const uint32_t* sortedTriangleIndices,
+		const uint8_t* deltas,
+		const AABB& sceneAABB,
+		int i_leaf)
+	{
+		int nInternals = nTriangles - 1;
+		uint32_t leaf_lower = i_leaf;
+		uint32_t leaf_upper = i_leaf;
+
+		uint32_t triangleIndex = sortedTriangleIndices[i_leaf];
+		minimum_lbvh::NodeIndex node(triangleIndex, true);
+
+		minimum_lbvh::AABB aabb; aabb.setEmpty();
+		for (auto v : triangles[triangleIndex].vs)
+		{
+			aabb.extend(v);
+		}
+
+		bool isRoot = true;
+		while (leaf_upper - leaf_lower < nInternals )
+		{
+			// direction from bottom
+			int goLeft;
+			if (leaf_lower == 0)
+			{
+				goLeft = 0;
+			}
+			else if (leaf_upper == nInternals )
+			{
+				goLeft = 1;
+			}
+			else
+			{
+				goLeft = deltas[leaf_lower - 1] < deltas[leaf_upper] ? 1 : 0;
+			}
+
+			int parent = goLeft ? (leaf_lower - 1) : leaf_upper;
+
+			internals[parent].children[goLeft] = node;
+			internals[parent].aabbs[goLeft] = aabb;
+			if (!node.m_isLeaf)
+			{
+				internals[node.m_index].parent = minimum_lbvh::NodeIndex(parent, false);
+			}
+
+			uint32_t index = goLeft ? leaf_upper : leaf_lower;
+
+			// == memory barrier ==
+
+			std::swap(stats[parent].oneOfEdges, index);
+
+			if (index == 0xFFFFFFFF)
+			{
+				isRoot = false;
+				break;
+			}
+
+			leaf_lower = minimum_lbvh::ss_min(leaf_lower, index);
+			leaf_upper = minimum_lbvh::ss_max(leaf_upper, index);
+
+			node = minimum_lbvh::NodeIndex(parent, false);
+
+			minimum_lbvh::AABB otherAABB = internals[parent].aabbs[goLeft ^ 0x1];
+			aabb.extend(otherAABB);
+		}
+
+		if (isRoot)
+		{
+			*rootNode = node;
+			internals[node.m_index].parent = minimum_lbvh::NodeIndex(0x7FFFFFFF, false);
+		}
+	}
+
 	inline bool intersect_ray_triangle(float* tOut, float* uOut, float* vOut, float3* ngOut, float t_min, float t_max, float3 ro, float3 rd, float3 v0, float3 v1, float3 v2 )
 	{
 		float3 e0 = v1 - v0;

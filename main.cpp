@@ -541,6 +541,10 @@ int main() {
                 internals.clear();
                 internals.resize(triangles.size() - 1);
 
+                std::vector<uint64_t> mortons(triangles.size());
+                std::vector<uint32_t> sortedTriangleIndices(triangles.size());
+                std::vector<minimum_lbvh::Stat> stats(mortons.size() - 1);
+
                 // Scene AABB
                 minimum_lbvh::AABB sceneAABB;
                 sceneAABB.setEmpty();
@@ -554,8 +558,6 @@ int main() {
                 }
                 // DrawAABB(to(sceneAABB.lower), to(sceneAABB.upper), { 255, 255, 255 });
 
-                std::vector<uint64_t> mortons(triangles.size());
-                std::vector<uint32_t> sortedTriangleIndices(triangles.size());
                 for (int i = 0; i < triangles.size(); i++)
                 {
                     minimum_lbvh::Triangle tri = triangles[i];
@@ -577,8 +579,7 @@ int main() {
                     uint64_t mB = mortons[sortedTriangleIndices[i + 1]];
                     deltas[i] = minimum_lbvh::delta(mA, mB);
                 }
-
-                std::vector<minimum_lbvh::Stat> stats(mortons.size() - 1);
+               
                 for (int i = 0; i < stats.size(); i++)
                 {
                     stats[i].oneOfEdges = 0xFFFFFFFF;
@@ -586,74 +587,19 @@ int main() {
 
                 for (uint32_t i_leaf = 0; i_leaf < mortons.size(); i_leaf++)
                 {
-                    uint32_t leaf_lower = i_leaf;
-                    uint32_t leaf_upper = i_leaf;
-
-                    uint32_t triangleIndex = sortedTriangleIndices[i_leaf];
-                    minimum_lbvh::NodeIndex node(triangleIndex, true);
-
-                    minimum_lbvh::AABB aabb; aabb.setEmpty();
-                    for (auto v : triangles[triangleIndex].vs)
-                    {
-                        aabb.extend(v);
-                    }
-
-                    bool isRoot = true;
-                    while (leaf_upper - leaf_lower < internals.size())
-                    {
-                        // direction from bottom
-                        int goLeft;
-                        if (leaf_lower == 0)
-                        {
-                            goLeft = 0;
-                        }
-                        else if (leaf_upper == stats.size())
-                        {
-                            goLeft = 1;
-                        }
-                        else
-                        {
-                            goLeft = deltas[leaf_lower - 1] < deltas[leaf_upper] ? 1 : 0;
-                        }
-
-                        int parent = goLeft ? (leaf_lower - 1) : leaf_upper;
-
-                        internals[parent].children[goLeft] = node;
-                        internals[parent].aabbs[goLeft] = aabb;
-                        if (!node.m_isLeaf)
-                        {
-                            internals[node.m_index].parent = minimum_lbvh::NodeIndex(parent, false);
-                        }
-
-                        uint32_t index = goLeft ? leaf_upper : leaf_lower;
-
-                        // == memory barrier ==
-
-                        std::swap(stats[parent].oneOfEdges, index);
-
-                        if (index == 0xFFFFFFFF)
-                        {
-                            isRoot = false;
-                            break;
-                        }
-
-                        leaf_lower = minimum_lbvh::ss_min(leaf_lower, index);
-                        leaf_upper = minimum_lbvh::ss_max(leaf_upper, index);
-
-                        node = minimum_lbvh::NodeIndex(parent, false);
-
-                        minimum_lbvh::AABB otherAABB = internals[parent].aabbs[goLeft ^ 0x1];
-                        aabb.extend(otherAABB);
-                    }
-
-                    if (isRoot)
-                    {
-                        rootNode = node;
-                        internals[rootNode.m_index].parent = minimum_lbvh::NodeIndex(0x7FFFFFFF, false);
-                    }
+                    minimum_lbvh::build_lbvh(
+                        &rootNode,
+                        internals.data(),
+                        stats.data(),
+                        triangles.data(),
+                        triangles.size(),
+                        sortedTriangleIndices.data(),
+                        deltas.data(),
+                        sceneAABB,
+                        i_leaf
+                    );
                 }
 
-                // printTree(internals.data(), rootNode);
 #if 1
                 // Validation - delta under the internal node must less or eq of the split.
                 for (int i = 0; i < internals.size(); i++)
