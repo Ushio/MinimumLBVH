@@ -256,13 +256,15 @@ namespace minimum_lbvh
 			float vol = u_vol + v_vol + w_vol;
 
 			// Barycentric Coordinates
-			float bW = w_vol / vol;
+			// hit = w*v0 + u*v1 + v*v2
+			//     = v0 + u*(v1 - v0) + v*(v2 - v0)
+			// float bW = w_vol / vol;
 			float bU = u_vol / vol;
 			float bV = v_vol / vol;
 
 			*tOut = t;
-			*uOut = bV;
-			*vOut = bW;
+			*uOut = bU;
+			*vOut = bV;
 			*ngOut = ng;
 			return true;
 		}

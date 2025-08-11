@@ -289,6 +289,7 @@ void intersect_stackfree(
             if (minimum_lbvh::intersect_ray_triangle(&t, &u, &v, &ng, 0.0f, hit->t, ro, rd, tri.vs[0], tri.vs[1], tri.vs[2]))
             {
                 hit->t = t;
+                hit->uv = make_float2(u, v);
                 hit->triangleIndex = curr_node.m_index;
                 hit->ng = ng;
             }
@@ -420,6 +421,11 @@ static void* embreeCreateLeaf(RTCThreadLocalAllocator alloc, const RTCBuildPrimi
     return node2ptr(node);
 }
 
+struct TriangleAttrib
+{
+    float3 shadingNormals[3];
+};
+
 int main() {
     using namespace pr;
 
@@ -451,6 +457,7 @@ int main() {
     minimum_lbvh::NodeIndex rootNode;
     std::vector<minimum_lbvh::InternalNode> internals;
     std::vector<minimum_lbvh::Triangle> triangles;
+    std::vector<TriangleAttrib> triangleAttribs;
 
     ITexture* texture = CreateTexture();
 
@@ -483,6 +490,7 @@ int main() {
             ColumnView<glm::vec3> normals(polymesh->normals());
 
             triangles.clear();
+            triangleAttribs.clear();
 
             int indexBase = 0;
             for (int i = 0; i < faceCounts.count(); i++)
@@ -490,10 +498,14 @@ int main() {
                 int nVerts = faceCounts[i];
                 PR_ASSERT(nVerts == 3);
                 minimum_lbvh::Triangle tri;
+                TriangleAttrib attrib;
                 for (int j = 0; j < nVerts; ++j)
                 {
                     glm::vec3 p = positions[indices[indexBase + j]];
                     tri.vs[j] = { p.x, p.y, p.z };
+
+                    glm::vec3 ns = normals[indexBase + j];
+                    attrib.shadingNormals[j] = { ns.x, ns.y, ns.z };
                 }
 
                 float3 e0 = tri.vs[1] - tri.vs[0];
@@ -501,6 +513,7 @@ int main() {
                 float3 e2 = tri.vs[0] - tri.vs[2];
 
                 triangles.push_back(tri);
+                triangleAttribs.push_back(attrib);
                 indexBase += nVerts;
             }
 
@@ -761,7 +774,11 @@ int main() {
                     float3 n = normalize(hit.ng);
                     if (smooth)
                     {
-                        // hit.uv
+                        TriangleAttrib attrib = triangleAttribs[hit.triangleIndex];
+                        n = attrib.shadingNormals[0] +
+                            (attrib.shadingNormals[1] - attrib.shadingNormals[0]) * hit.uv.x +
+                            (attrib.shadingNormals[2] - attrib.shadingNormals[0]) * hit.uv.y;
+                        n = normalize(n);
                     }
                     float3 color = (n + make_float3(1.0f)) * 0.5f;
                     image(i, j) = { 255 * color.x, 255 * color.y, 255 * color.z, 255 };
