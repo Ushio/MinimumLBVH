@@ -433,6 +433,9 @@ int main() {
     camera.origin = { 1.5f, 1.5f, 1.5f };
     camera.lookat = { 0, 0, 0 };
 
+    camera.fovy = 0.002f;
+    camera.origin = { 500, 500, 500 };
+
     SetDataDir(ExecutableDir());
     std::string err;
     std::shared_ptr<FScene> scene = ReadWavefrontObj(GetDataPath("test.obj"), err);
@@ -447,7 +450,7 @@ int main() {
     // BVH
     minimum_lbvh::NodeIndex rootNode;
     std::vector<minimum_lbvh::InternalNode> internals;
-    std::vector<minimum_lbvh::Triangle> sorted_triangles;
+    std::vector<minimum_lbvh::Triangle> triangles;
 
     ITexture* texture = CreateTexture();
 
@@ -479,7 +482,8 @@ int main() {
             ColumnView<glm::vec3> positions(polymesh->positions());
             ColumnView<glm::vec3> normals(polymesh->normals());
 
-            std::vector<minimum_lbvh::Triangle> triangles;
+            triangles.clear();
+
             int indexBase = 0;
             for (int i = 0; i < faceCounts.count(); i++)
             {
@@ -523,7 +527,6 @@ int main() {
 #if 1
                 internals.clear();
                 internals.resize(triangles.size() - 1);
-                sorted_triangles.resize(triangles.size());
 
                 // Scene AABB
                 minimum_lbvh::AABB sceneAABB;
@@ -539,31 +542,26 @@ int main() {
                 // DrawAABB(to(sceneAABB.lower), to(sceneAABB.upper), { 255, 255, 255 });
 
                 std::vector<uint64_t> mortons(triangles.size());
-                std::vector<uint32_t> triangleIndices(triangles.size());
+                std::vector<uint32_t> sortedTriangleIndices(triangles.size());
                 for (int i = 0; i < triangles.size(); i++)
                 {
                     minimum_lbvh::Triangle tri = triangles[i];
                     float3 center = (tri.vs[0] + tri.vs[1] + tri.vs[2]) / 3.0f;
                     mortons[i] = sceneAABB.encodeMortonCode(center);
-                    triangleIndices[i] = i;
+                    sortedTriangleIndices[i] = i;
 
                     // DrawSphere(to(center), 0.04f, { 255, 0, 0 });
                 }
 
-                std::sort(triangleIndices.begin(), triangleIndices.end(), [&mortons](uint32_t a, uint32_t b) {
+                std::sort(sortedTriangleIndices.begin(), sortedTriangleIndices.end(), [&mortons](uint32_t a, uint32_t b) {
                     return mortons[a] < mortons[b];
                 });
-
-                for (int i = 0; i < triangles.size(); i++)
-                {
-                    sorted_triangles[i] = triangles[triangleIndices[i]];
-                }
 
                 std::vector<uint8_t> deltas(mortons.size() - 1);
                 for (int i = 0; i < deltas.size(); i++)
                 {
-                    uint64_t mA = mortons[triangleIndices[i]];
-                    uint64_t mB = mortons[triangleIndices[i + 1]];
+                    uint64_t mA = mortons[sortedTriangleIndices[i]];
+                    uint64_t mB = mortons[sortedTriangleIndices[i + 1]];
                     deltas[i] = minimum_lbvh::delta(mA, mB);
                 }
 
@@ -577,10 +575,12 @@ int main() {
                 {
                     uint32_t leaf_lower = i_leaf;
                     uint32_t leaf_upper = i_leaf;
-                    minimum_lbvh::NodeIndex node(i_leaf, true);
+
+                    uint32_t triangleIndex = sortedTriangleIndices[i_leaf];
+                    minimum_lbvh::NodeIndex node(triangleIndex, true);
 
                     minimum_lbvh::AABB aabb; aabb.setEmpty();
-                    for (auto v : sorted_triangles[i_leaf].vs)
+                    for (auto v : triangles[triangleIndex].vs)
                     {
                         aabb.extend(v);
                     }
@@ -647,8 +647,7 @@ int main() {
                 {
                     minimum_lbvh::NodeIndex node(i, false /*is leaf*/);
 
-                    int leaf_lower = INT_MAX;
-                    int leaf_upper = -1;
+                    std::vector<uint64_t> allMortons;
                     std::stack<minimum_lbvh::NodeIndex> stack;
                     stack.push(node);
                     while (!stack.empty())
@@ -658,8 +657,10 @@ int main() {
 
                         if (cur.m_isLeaf)
                         {
-                            leaf_lower = minimum_lbvh::ss_min(leaf_lower, (int)cur.m_index);
-                            leaf_upper = minimum_lbvh::ss_max(leaf_upper, (int)cur.m_index);
+                            minimum_lbvh::Triangle tri = triangles[cur.m_index];
+                            float3 center = (tri.vs[0] + tri.vs[1] + tri.vs[2]) / 3.0f;
+                            uint64_t morton = sceneAABB.encodeMortonCode(center);
+                            allMortons.push_back(morton);
                         }
                         else
                         {
@@ -671,9 +672,9 @@ int main() {
                     int maxDelta = deltas[i];
 
                     // for all delta under the node
-                    for (int j = leaf_lower; j < leaf_upper; j++)
+                    for (int j = 0; j < allMortons.size() - 1; j++)
                     {
-                        if (maxDelta < deltas[j])
+                        if (maxDelta < minimum_lbvh::delta(allMortons[j], allMortons[j + 1]))
                         {
                             abort();
                         }
@@ -754,7 +755,7 @@ int main() {
                 rayGenerator.shoot(&ro, &rd, i, j, 0.5f, 0.5f);
 
                 Hit hit;
-                intersect_stackfree(&hit, internals.data(), sorted_triangles.data(), rootNode, to(ro), to(rd), invRd(to(rd)));
+                intersect_stackfree(&hit, internals.data(), triangles.data(), rootNode, to(ro), to(rd), invRd(to(rd)));
                 if (hit.t != FLT_MAX)
                 {
                     float3 n = normalize(hit.ng);
