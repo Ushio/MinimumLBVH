@@ -274,11 +274,10 @@ void intersect_stackfree(
     float3 rd,
     float3 one_over_rd)
 {
-    bool decent = true;
     minimum_lbvh::NodeIndex curr_node = node;
-    minimum_lbvh::NodeIndex prev_node(0x7FFFFFFF, false);
+    minimum_lbvh::NodeIndex prev_node = minimum_lbvh::NodeIndex::invalid();
 
-    while(curr_node.m_index != 0x7FFFFFFF)
+    while(curr_node != minimum_lbvh::NodeIndex::invalid())
     {
         if (curr_node.m_isLeaf)
         {
@@ -295,7 +294,6 @@ void intersect_stackfree(
             }
 
             std::swap(curr_node, prev_node);
-            decent = false;
             continue;
         }
 
@@ -326,7 +324,7 @@ void intersect_stackfree(
         }
 
         minimum_lbvh::NodeIndex next_node;
-        if (decent)
+        if (prev_node == parent_node)
         {
             next_node = 0 < nHits ? near_node : parent_node;
         }
@@ -339,7 +337,6 @@ void intersect_stackfree(
             next_node = parent_node;
         }
 
-        decent = !(next_node == parent_node);
         prev_node = curr_node;
         curr_node = next_node;
     }
@@ -715,7 +712,7 @@ int main() {
 
         //traverse(internals.data(), rootNode, 0);
 
-        int stride = 4;
+        int stride = 2;
         Image2DRGBA8 image;
         image.allocate(GetScreenWidth() / stride, GetScreenHeight() / stride);
 
@@ -729,7 +726,7 @@ int main() {
                 rayGenerator.shoot(&ro, &rd, i, j, 0.5f, 0.5f);
 
                 Hit hit;
-                intersect(&hit, internals.data(), triangles.data(), rootNode, to(ro), to(rd), invRd(to(rd)));
+                intersect_stackfree(&hit, internals.data(), triangles.data(), rootNode, to(ro), to(rd), invRd(to(rd)));
                 if (hit.t != FLT_MAX)
                 {
                     float3 n = normalize(hit.ng);

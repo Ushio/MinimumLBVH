@@ -200,15 +200,20 @@ namespace minimum_lbvh
 		NodeIndex(uint32_t index, bool isLeaf) :m_index(index), m_isLeaf(isLeaf) {}
 		uint32_t m_index : 31;
 		uint32_t m_isLeaf : 1;
+
+		static NodeIndex invalid()
+		{
+			return NodeIndex(0x7FFFFFFF, false);
+		}
 	};
 
 	inline bool operator==(NodeIndex a, NodeIndex b)
 	{
-		uint32_t aBits;
-		uint32_t bBits;
-		memcpy(&aBits, &a, sizeof(uint32_t));
-		memcpy(&bBits, &b, sizeof(uint32_t));
-		return aBits == bBits;
+		return a.m_index == b.m_index && a.m_isLeaf == b.m_isLeaf;
+	}
+	inline bool operator!=(NodeIndex a, NodeIndex b)
+	{
+		return !(a == b);
 	}
 
 	struct InternalNode
@@ -299,7 +304,7 @@ namespace minimum_lbvh
 		if (isRoot)
 		{
 			*rootNode = node;
-			internals[node.m_index].parent = minimum_lbvh::NodeIndex(0x7FFFFFFF, false);
+			internals[node.m_index].parent = minimum_lbvh::NodeIndex::invalid();
 		}
 	}
 
