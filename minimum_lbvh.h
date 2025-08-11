@@ -238,9 +238,9 @@ namespace minimum_lbvh
 		uint32_t leaf_upper = i_leaf;
 
 		uint32_t triangleIndex = sortedTriangleIndices[i_leaf];
-		minimum_lbvh::NodeIndex node(triangleIndex, true);
+		NodeIndex node(triangleIndex, true);
 
-		minimum_lbvh::AABB aabb; aabb.setEmpty();
+		AABB aabb; aabb.setEmpty();
 		for (auto v : triangles[triangleIndex].vs)
 		{
 			aabb.extend(v);
@@ -287,12 +287,12 @@ namespace minimum_lbvh
 				break;
 			}
 
-			leaf_lower = minimum_lbvh::ss_min(leaf_lower, index);
-			leaf_upper = minimum_lbvh::ss_max(leaf_upper, index);
+			leaf_lower = ss_min(leaf_lower, index);
+			leaf_upper = ss_max(leaf_upper, index);
 
-			node = minimum_lbvh::NodeIndex(parent, false);
+			node = NodeIndex(parent, false);
 
-			minimum_lbvh::AABB otherAABB = internals[parent].aabbs[goLeft ^ 0x1];
+			AABB otherAABB = internals[parent].aabbs[goLeft ^ 0x1];
 			aabb.extend(otherAABB);
 		}
 
