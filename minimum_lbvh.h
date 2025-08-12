@@ -333,7 +333,8 @@ namespace minimum_lbvh
 			float v_vol = dot(cross(e0, v1 + v0 - ro * 2.0f), rd);
 			float w_vol = dot(cross(e1, v2 + v1 - ro * 2.0f), rd);
 
-			if (u_vol < 0.0f || v_vol < 0.0f || w_vol < 0.0f)
+			// +,- mixed then no hits
+			if (fminf(fminf(u_vol, v_vol), w_vol) < 0.0f && 0.0f < fmaxf(fmaxf(u_vol, v_vol), w_vol))
 			{
 				return false;
 			}
