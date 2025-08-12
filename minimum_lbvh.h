@@ -231,7 +231,6 @@ namespace minimum_lbvh
 		int nTriangles,
 		const uint32_t* sortedTriangleIndices,
 		const uint8_t* deltas,
-		const AABB& sceneAABB,
 		int i_leaf)
 	{
 		int nInternals = nTriangles - 1;
@@ -242,9 +241,12 @@ namespace minimum_lbvh
 		NodeIndex node(triangleIndex, true);
 
 		AABB aabb; aabb.setEmpty();
-		for (auto v : triangles[triangleIndex].vs)
+		if (triangles)
 		{
-			aabb.extend(v);
+			for (auto v : triangles[triangleIndex].vs)
+			{
+				aabb.extend(v);
+			}
 		}
 
 		bool isRoot = true;

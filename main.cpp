@@ -83,54 +83,23 @@ void runToyExample()
     {
         internals[i].oneOfEdges = 0xFFFFFFFF;
     }
+    
+    std::vector<uint32_t> sortedTriangleIndices(mortons.size());
+    for (int i = 0; i < sortedTriangleIndices.size(); i++)
+    {
+        sortedTriangleIndices[i] = i;
+    }
 
     for (uint32_t i_leaf = 0; i_leaf < mortons.size(); i_leaf++)
     {
-        uint32_t leaf_lower = i_leaf;
-        uint32_t leaf_upper = i_leaf;
-        minimum_lbvh::NodeIndex node(i_leaf, true);
-
-        bool isRoot = true;
-        while (leaf_upper - leaf_lower < internals.size())
-        {
-            // direction from bottom
-            int goLeft;
-            if (leaf_lower == 0)
-            {
-                goLeft = 0;
-            }
-            else if (leaf_upper == internals.size())
-            {
-                goLeft = 1;
-            }
-            else
-            {
-                goLeft = deltas[leaf_lower - 1] < deltas[leaf_upper] ? 1 : 0;
-            }
-
-            int parent = goLeft ? (leaf_lower - 1) : leaf_upper;
-
-            internals[parent].children[goLeft] = node;
-
-            uint32_t index = goLeft ? leaf_upper : leaf_lower;
-            std::swap(internals[parent].oneOfEdges, index);
-
-            if (index == 0xFFFFFFFF)
-            {
-                isRoot = false;
-                break;
-            }
-
-            leaf_lower = minimum_lbvh::ss_min(leaf_lower, index);
-            leaf_upper = minimum_lbvh::ss_max(leaf_upper, index);
-
-            node = minimum_lbvh::NodeIndex(parent, false);
-        }
-
-        if (isRoot)
-        {
-            rootNode = node;
-        }
+        minimum_lbvh::build_lbvh(
+            &rootNode,
+            internals.data(),
+            nullptr,
+            mortons.size(),
+            sortedTriangleIndices.data(),
+            deltas.data(), 
+            i_leaf);
     }
 
     printTree(internals.data(), rootNode);
@@ -582,7 +551,6 @@ int main() {
                         triangles.size(),
                         sortedTriangleIndices.data(),
                         deltas.data(),
-                        sceneAABB,
                         i_leaf
                     );
                 }
@@ -595,7 +563,6 @@ int main() {
                         triangles.size(),
                         sortedTriangleIndices.data(),
                         deltas.data(),
-                        sceneAABB,
                         i_leaf
                     );
                 });
