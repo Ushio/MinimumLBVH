@@ -76,15 +76,13 @@ void runToyExample()
         deltas[i] = minimum_lbvh::delta(mortons[i], mortons[i + 1]);
     }
 
-    std::vector<minimum_lbvh::Stat> stats(mortons.size() - 1);
-    for (int i = 0; i < stats.size(); i++)
-    {
-        stats[i].oneOfEdges = 0xFFFFFFFF;
-    }
-
     minimum_lbvh::NodeIndex rootNode;
     std::vector<minimum_lbvh::InternalNode> internals;
     internals.resize(mortons.size() - 1);
+    for (int i = 0; i < internals.size(); i++)
+    {
+        internals[i].oneOfEdges = 0xFFFFFFFF;
+    }
 
     for (uint32_t i_leaf = 0; i_leaf < mortons.size(); i_leaf++)
     {
@@ -101,7 +99,7 @@ void runToyExample()
             {
                 goLeft = 0;
             }
-            else if (leaf_upper == stats.size())
+            else if (leaf_upper == internals.size())
             {
                 goLeft = 1;
             }
@@ -115,7 +113,7 @@ void runToyExample()
             internals[parent].children[goLeft] = node;
 
             uint32_t index = goLeft ? leaf_upper : leaf_lower;
-            std::swap(stats[parent].oneOfEdges, index);
+            std::swap(internals[parent].oneOfEdges, index);
 
             if (index == 0xFFFFFFFF)
             {
@@ -530,10 +528,13 @@ int main() {
 #if 1
                 internals.clear();
                 internals.resize(triangles.size() - 1);
+                for (int i = 0; i < internals.size(); i++)
+                {
+                    internals[i].oneOfEdges = 0xFFFFFFFF;
+                }
 
                 std::vector<uint64_t> mortons(triangles.size());
                 std::vector<uint32_t> sortedTriangleIndices(triangles.size());
-                std::vector<minimum_lbvh::Stat> stats(mortons.size() - 1);
 
                 // Scene AABB
                 minimum_lbvh::AABB sceneAABB;
@@ -570,11 +571,6 @@ int main() {
                     deltas[i] = minimum_lbvh::delta(mA, mB);
                 }
                
-                for (int i = 0; i < stats.size(); i++)
-                {
-                    stats[i].oneOfEdges = 0xFFFFFFFF;
-                }
-
                 Stopwatch sw;
 #if 0
                 for (uint32_t i_leaf = 0; i_leaf < mortons.size(); i_leaf++)
@@ -582,7 +578,6 @@ int main() {
                     minimum_lbvh::build_lbvh(
                         &rootNode,
                         internals.data(),
-                        stats.data(),
                         triangles.data(),
                         triangles.size(),
                         sortedTriangleIndices.data(),
@@ -596,7 +591,6 @@ int main() {
                     minimum_lbvh::build_lbvh(
                         &rootNode,
                         internals.data(),
-                        stats.data(),
                         triangles.data(),
                         triangles.size(),
                         sortedTriangleIndices.data(),

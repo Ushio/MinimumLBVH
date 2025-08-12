@@ -221,16 +221,12 @@ namespace minimum_lbvh
 		NodeIndex parent;
 		NodeIndex children[2];
 		AABB aabbs[2];
-	};
-	struct Stat
-	{
-		uint32_t oneOfEdges;
+		uint32_t oneOfEdges; // wasteful but for simplicity
 	};
 
 	inline void build_lbvh(
 		NodeIndex* rootNode,
 		InternalNode* internals,
-		Stat* stats,
 		const Triangle* triangles,
 		int nTriangles,
 		const uint32_t* sortedTriangleIndices,
@@ -282,7 +278,7 @@ namespace minimum_lbvh
 
 			// == memory barrier ==
 
-			index = InterlockedExchange( &stats[parent].oneOfEdges, index );
+			index = InterlockedExchange( &internals[parent].oneOfEdges, index );
 
 			// == memory barrier ==
 
