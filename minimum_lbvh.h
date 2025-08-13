@@ -234,6 +234,7 @@ namespace minimum_lbvh
 		int i_leaf)
 	{
 		int nInternals = nTriangles - 1;
+		int nDeltas = nInternals;
 		uint32_t leaf_lower = i_leaf;
 		uint32_t leaf_upper = i_leaf;
 
@@ -253,19 +254,9 @@ namespace minimum_lbvh
 		while (leaf_upper - leaf_lower < nInternals )
 		{
 			// direction from bottom
-			int goLeft;
-			if (leaf_lower == 0)
-			{
-				goLeft = 0;
-			}
-			else if (leaf_upper == nInternals )
-			{
-				goLeft = 1;
-			}
-			else
-			{
-				goLeft = deltas[leaf_lower - 1] < deltas[leaf_upper] ? 1 : 0;
-			}
+			uint32_t deltaL = 0 < leaf_lower ? deltas[leaf_lower - 1] : 0xFFFFFFFF;
+			uint32_t deltaR = leaf_upper < nDeltas ? deltas[leaf_upper] : 0xFFFFFFFF;
+			int goLeft = deltaL < deltaR ? 1 : 0;
 
 			int parent = goLeft ? (leaf_lower - 1) : leaf_upper;
 
