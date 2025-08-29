@@ -29,11 +29,11 @@
 namespace minimum_lbvh
 {
 	template <class T>
-	void swap(T& a, T& b)
+	void swap(T* a, T* b)
 	{
-		T tmp = a;
-		a = b;
-		b = tmp;
+		T tmp = *a;
+		*a = *b;
+		*b = tmp;
 	}
 
 	template <class T>
@@ -243,16 +243,15 @@ namespace minimum_lbvh
 		InternalNode* internals,
 		const Triangle* triangles,
 		int nTriangles,
-		const uint32_t* sortedTriangleIndices,
 		const uint8_t* deltas,
-		int i_leaf)
+		int i_leaf,
+		uint32_t triangleIndex )
 	{
 		int nInternals = nTriangles - 1;
 		int nDeltas = nInternals;
 		uint32_t leaf_lower = i_leaf;
 		uint32_t leaf_upper = i_leaf;
 
-		uint32_t triangleIndex = sortedTriangleIndices[i_leaf];
 		NodeIndex node(triangleIndex, true);
 
 		AABB aabb; aabb.setEmpty();
@@ -450,6 +449,12 @@ namespace minimum_lbvh
 	}
 #endif
 
+	struct IndexedMorton
+	{
+		uint32_t morton;
+		uint32_t index;
+	};
+
 	class BVHCPUBuilder
 	{
 	public:
@@ -475,25 +480,20 @@ namespace minimum_lbvh
 				}
 			}
 
-			std::vector<uint64_t> mortons(nTriangles);
-			std::vector<uint32_t> sortedTriangleIndices(nTriangles);
-
+			std::vector<IndexedMorton> mortons(nTriangles);
 			for (int i = 0; i < nTriangles; i++)
 			{
 				Triangle tri = triangles[i];
 				float3 center = (tri.vs[0] + tri.vs[1] + tri.vs[2]) / 3.0f;
-				mortons[i] = sceneAABB.encodeMortonCode(center);
-				sortedTriangleIndices[i] = i;
+				mortons[i].morton = (uint32_t)( sceneAABB.encodeMortonCode(center) >> 31 ); // take higher 32bits out of 63bits
+				mortons[i].index = i;
 			}
-
-			std::sort(sortedTriangleIndices.begin(), sortedTriangleIndices.end(), [&mortons](uint32_t a, uint32_t b) {
-				return mortons[a] < mortons[b];
-			});
+			std::sort(mortons.begin(), mortons.end(), [](IndexedMorton a, IndexedMorton b) { return a.morton < b.morton; });
 
 			for (int i = 0; i < m_deltas.size(); i++)
 			{
-				uint64_t mA = mortons[sortedTriangleIndices[i]];
-				uint64_t mB = mortons[sortedTriangleIndices[i + 1]];
+				uint32_t mA = mortons[i].morton;
+				uint32_t mB = mortons[i+1].morton;
 				m_deltas[i] = delta(mA, mB);
 			}
 
@@ -505,9 +505,9 @@ namespace minimum_lbvh
 						m_internals.data(),
 						triangles,
 						nTriangles,
-						sortedTriangleIndices.data(),
 						m_deltas.data(),
-						i_leaf
+						i_leaf,
+						mortons[i_leaf].index
 					);
 				});
 			}
@@ -520,9 +520,9 @@ namespace minimum_lbvh
 						m_internals.data(),
 						triangles,
 						nTriangles,
-						sortedTriangleIndices.data(),
 						m_deltas.data(),
-						i_leaf
+						i_leaf,
+						mortons[i_leaf].index
 					);
 				}
 			}
@@ -703,7 +703,7 @@ namespace minimum_lbvh
 					hit->ng = ng;
 				}
 
-				swap(curr_node, prev_node);
+				swap(&curr_node, &prev_node);
 				continue;
 			}
 
@@ -723,7 +723,7 @@ namespace minimum_lbvh
 			{
 				if (rangeR.x < rangeL.x)
 				{
-					swap(near_node, far_node);
+					swap(&near_node, &far_node);
 				}
 				nHits = 2;
 			}

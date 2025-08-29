@@ -97,9 +97,10 @@ void runToyExample()
             internals.data(),
             nullptr,
             mortons.size(),
-            sortedTriangleIndices.data(),
             deltas.data(), 
-            i_leaf);
+            i_leaf,
+            sortedTriangleIndices[i_leaf]
+        );
     }
 
     printTree(internals.data(), rootNode);
@@ -243,7 +244,7 @@ int main() {
 
             if (builder.empty())
             {
-#if 0
+#if 1
                 Stopwatch sw;
                 builder.build(triangles.data(), triangles.size(), true /* isParallel */);
                 printf("build %f\n", sw.elapsed());
