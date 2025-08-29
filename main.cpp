@@ -197,7 +197,7 @@ void intersect(
             float u, v;
             float3 ng;
             const minimum_lbvh::Triangle& tri = triangles[node.m_index];
-            if (minimum_lbvh::intersect_ray_triangle(&t, &u, &v, &ng, 0.0f, hit->t, ro, rd, tri.vs[0], tri.vs[1], tri.vs[2]))
+            if (minimum_lbvh::intersectRayTriangle(&t, &u, &v, &ng, 0.0f, hit->t, ro, rd, tri.vs[0], tri.vs[1], tri.vs[2]))
             {
                 hit->t = t;
                 hit->uv = make_float2(u, v);
@@ -252,7 +252,7 @@ void intersect_stackfree(
             float u, v;
             float3 ng;
             const minimum_lbvh::Triangle& tri = triangles[curr_node.m_index];
-            if (minimum_lbvh::intersect_ray_triangle(&t, &u, &v, &ng, 0.0f, hit->t, ro, rd, tri.vs[0], tri.vs[1], tri.vs[2]))
+            if (minimum_lbvh::intersectRayTriangle(&t, &u, &v, &ng, 0.0f, hit->t, ro, rd, tri.vs[0], tri.vs[1], tri.vs[2]))
             {
                 hit->t = t;
                 hit->uv = make_float2(u, v);

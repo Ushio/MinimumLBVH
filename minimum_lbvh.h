@@ -180,11 +180,6 @@ namespace minimum_lbvh
 			lower = fminf(lower, b.lower);
 			upper = fmaxf(upper, b.upper);
 		}
-		float surface_area() const
-		{
-			float3 size = upper - lower;
-			return (size.x * size.y + size.y * size.z + size.z * size.x) * 2.0f;
-		}
 
 		uint64_t encodeMortonCode(float3 p) const
 		{
@@ -297,7 +292,7 @@ namespace minimum_lbvh
 		}
 	}
 
-	inline bool intersect_ray_triangle(float* tOut, float* uOut, float* vOut, float3* ngOut, float t_min, float t_max, float3 ro, float3 rd, float3 v0, float3 v1, float3 v2 )
+	inline bool intersectRayTriangle(float* tOut, float* uOut, float* vOut, float3* ngOut, float t_min, float t_max, float3 ro, float3 rd, float3 v0, float3 v1, float3 v2 )
 	{
 		float3 e0 = v1 - v0;
 		float3 e1 = v2 - v1;
