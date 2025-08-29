@@ -29,6 +29,14 @@
 namespace minimum_lbvh
 {
 	template <class T>
+	void swap(T& a, T& b)
+	{
+		T tmp = a;
+		a = b;
+		b = tmp;
+	}
+
+	template <class T>
 	inline T ss_max(T x, T y)
 	{
 		return (x < y) ? y : x;
@@ -695,7 +703,7 @@ namespace minimum_lbvh
 					hit->ng = ng;
 				}
 
-				std::swap(curr_node, prev_node);
+				swap(curr_node, prev_node);
 				continue;
 			}
 
@@ -715,7 +723,7 @@ namespace minimum_lbvh
 			{
 				if (rangeR.x < rangeL.x)
 				{
-					std::swap(near_node, far_node);
+					swap(near_node, far_node);
 				}
 				nHits = 2;
 			}
