@@ -7,10 +7,16 @@
 #endif
 
 #if defined(MINIMUM_LBVH_KERNELCC)
+
+#define MINIMUM_LBVH_ASSERT(ExpectTrue) ((void)0)
+
 #else
 #include <stdint.h>
 #include <intrin.h>
 #include <Windows.h>
+
+#define MINIMUM_LBVH_ASSERT(ExpectTrue) if((ExpectTrue) == 0) { abort(); }
+
 #endif
 
 #define MORTON_MAX_VALUE_3D 0x1FFFFF
@@ -259,7 +265,7 @@ namespace minimum_lbvh
 			internals[parent].aabbs[goLeft] = aabb;
 			if (!node.m_isLeaf)
 			{
-				internals[node.m_index].parent = minimum_lbvh::NodeIndex(parent, false);
+				internals[node.m_index].parent = NodeIndex(parent, false);
 			}
 
 			uint32_t index = goLeft ? leaf_upper : leaf_lower;
@@ -288,7 +294,7 @@ namespace minimum_lbvh
 		if (isRoot)
 		{
 			*rootNode = node;
-			internals[node.m_index].parent = minimum_lbvh::NodeIndex::invalid();
+			internals[node.m_index].parent = NodeIndex::invalid();
 		}
 	}
 
@@ -343,4 +349,91 @@ namespace minimum_lbvh
 
 		return false;
 	}
+
+	inline void validate_lbvh( NodeIndex node, const InternalNode* internals, const uint8_t* deltas, int maxDelta )
+	{
+		if (node.m_isLeaf)
+		{
+			return;
+		}
+
+		auto delta = deltas[node.m_index];
+		MINIMUM_LBVH_ASSERT(delta <= maxDelta);
+		validate_lbvh(internals[node.m_index].children[0], internals, deltas, delta);
+		validate_lbvh(internals[node.m_index].children[1], internals, deltas, delta);
+	}
+
+	class BVHCPUBuilder
+	{
+	public:
+		void build(const Triangle *triangles, int nTriangles)
+		{
+			m_internals.clear();
+			m_internals.resize(nTriangles - 1);
+			for (int i = 0; i < m_internals.size(); i++)
+			{
+				m_internals[i].oneOfEdges = 0xFFFFFFFF;
+			}
+			m_deltas.resize(nTriangles - 1);
+
+			// Scene AABB
+			minimum_lbvh::AABB sceneAABB;
+			sceneAABB.setEmpty();
+
+			for (int i = 0 ; i < nTriangles ; i++)
+			{
+				for (int j = 0; j < 3; ++j)
+				{
+					sceneAABB.extend(triangles[i].vs[j]);
+				}
+			}
+
+			std::vector<uint64_t> mortons(nTriangles);
+			std::vector<uint32_t> sortedTriangleIndices(nTriangles);
+
+			for (int i = 0; i < nTriangles; i++)
+			{
+				minimum_lbvh::Triangle tri = triangles[i];
+				float3 center = (tri.vs[0] + tri.vs[1] + tri.vs[2]) / 3.0f;
+				mortons[i] = sceneAABB.encodeMortonCode(center);
+				sortedTriangleIndices[i] = i;
+			}
+
+			std::sort(sortedTriangleIndices.begin(), sortedTriangleIndices.end(), [&mortons](uint32_t a, uint32_t b) {
+				return mortons[a] < mortons[b];
+			});
+
+			for (int i = 0; i < m_deltas.size(); i++)
+			{
+				uint64_t mA = mortons[sortedTriangleIndices[i]];
+				uint64_t mB = mortons[sortedTriangleIndices[i + 1]];
+				m_deltas[i] = minimum_lbvh::delta(mA, mB);
+			}
+
+			for (uint32_t i_leaf = 0; i_leaf < mortons.size(); i_leaf++)
+			{
+				build_lbvh(
+					&m_rootNode,
+					m_internals.data(),
+					triangles,
+					nTriangles,
+					sortedTriangleIndices.data(),
+					m_deltas.data(),
+					i_leaf
+				);
+			}
+		}
+		bool empty() const
+		{
+			return m_internals.empty();
+		}
+		void validate() const
+		{
+			minimum_lbvh::validate_lbvh(m_rootNode, m_internals.data(), m_deltas.data(), INT_MAX);
+		}
+
+		minimum_lbvh::NodeIndex m_rootNode;
+		std::vector<minimum_lbvh::InternalNode> m_internals;
+		std::vector<uint8_t> m_deltas;
+	};
 }
