@@ -13,9 +13,14 @@
 #else
 #include <stdint.h>
 #include <intrin.h>
+#include <vector>
 #include <Windows.h>
-
+#include <ppl.h>
 #define MINIMUM_LBVH_ASSERT(ExpectTrue) if((ExpectTrue) == 0) { abort(); }
+
+#if defined( ENABLE_EMBREE_BUILDER )
+#include <embree4/rtcore.h>
+#endif
 
 #endif
 
@@ -362,11 +367,77 @@ namespace minimum_lbvh
 		validate_lbvh(internals[node.m_index].children[0], internals, deltas, delta);
 		validate_lbvh(internals[node.m_index].children[1], internals, deltas, delta);
 	}
+#if defined( ENABLE_EMBREE_BUILDER )
+	struct EmbreeBVHContext
+	{
+		EmbreeBVHContext() {
+			nodes = 0;
+			nodeHead = 0;
+		}
+		InternalNode* nodes;
+		std::atomic<int> nodeHead;
+	};
+
+	inline void* node2ptr(NodeIndex node)
+	{
+		uint32_t data;
+		memcpy(&data, &node, sizeof(uint32_t));
+		return (char*)0 + data;
+	}
+	inline NodeIndex ptr2node(void* ptr)
+	{
+		uint32_t data = (char*)ptr - (char*)0;
+		NodeIndex node;
+		memcpy(&node, &data, sizeof(uint32_t));
+		return node;
+	}
+
+	static void* embrreeCreateNode(RTCThreadLocalAllocator alloc, unsigned int numChildren, void* userPtr)
+	{
+		MINIMUM_LBVH_ASSERT(numChildren == 2);
+
+		EmbreeBVHContext* context = (EmbreeBVHContext*)userPtr;
+		int index = context->nodeHead++;
+
+		NodeIndex node(index, false);
+		return node2ptr(node);
+	}
+	static void embreeSetNodeChildren(void* nodePtr, void** childPtr, unsigned int numChildren, void* userPtr)
+	{
+		MINIMUM_LBVH_ASSERT(numChildren == 2);
+
+		EmbreeBVHContext* context = (EmbreeBVHContext*)userPtr;
+		InternalNode& node = context->nodes[ptr2node(nodePtr).m_index];
+		for (int i = 0; i < numChildren; i++)
+		{
+			node.children[i] = ptr2node(childPtr[i]);
+		}
+	}
+	static void embreeSetNodeBounds(void* nodePtr, const RTCBounds** bounds, unsigned int numChildren, void* userPtr)
+	{
+		MINIMUM_LBVH_ASSERT(numChildren == 2);
+
+		EmbreeBVHContext* context = (EmbreeBVHContext*)userPtr;
+		InternalNode& node = context->nodes[ptr2node(nodePtr).m_index];
+
+		for (int i = 0; i < numChildren; i++)
+		{
+			node.aabbs[i].lower = make_float3(bounds[i]->lower_x, bounds[i]->lower_y, bounds[i]->lower_z);
+			node.aabbs[i].upper = make_float3(bounds[i]->upper_x, bounds[i]->upper_y, bounds[i]->upper_z);
+		}
+	}
+	static void* embreeCreateLeaf(RTCThreadLocalAllocator alloc, const RTCBuildPrimitive* prims, size_t numPrims, void* userPtr)
+	{
+		MINIMUM_LBVH_ASSERT(numPrims == 1);
+		NodeIndex node(prims->primID, true /*is leaf*/);
+		return node2ptr(node);
+	}
+#endif
 
 	class BVHCPUBuilder
 	{
 	public:
-		void build(const Triangle *triangles, int nTriangles)
+		void build(const Triangle *triangles, int nTriangles, bool isParallel )
 		{
 			m_internals.clear();
 			m_internals.resize(nTriangles - 1);
@@ -377,7 +448,7 @@ namespace minimum_lbvh
 			m_deltas.resize(nTriangles - 1);
 
 			// Scene AABB
-			minimum_lbvh::AABB sceneAABB;
+			AABB sceneAABB;
 			sceneAABB.setEmpty();
 
 			for (int i = 0 ; i < nTriangles ; i++)
@@ -393,7 +464,7 @@ namespace minimum_lbvh
 
 			for (int i = 0; i < nTriangles; i++)
 			{
-				minimum_lbvh::Triangle tri = triangles[i];
+				Triangle tri = triangles[i];
 				float3 center = (tri.vs[0] + tri.vs[1] + tri.vs[2]) / 3.0f;
 				mortons[i] = sceneAABB.encodeMortonCode(center);
 				sortedTriangleIndices[i] = i;
@@ -407,33 +478,112 @@ namespace minimum_lbvh
 			{
 				uint64_t mA = mortons[sortedTriangleIndices[i]];
 				uint64_t mB = mortons[sortedTriangleIndices[i + 1]];
-				m_deltas[i] = minimum_lbvh::delta(mA, mB);
+				m_deltas[i] = delta(mA, mB);
 			}
 
-			for (uint32_t i_leaf = 0; i_leaf < mortons.size(); i_leaf++)
+			if (isParallel)
 			{
-				build_lbvh(
-					&m_rootNode,
-					m_internals.data(),
-					triangles,
-					nTriangles,
-					sortedTriangleIndices.data(),
-					m_deltas.data(),
-					i_leaf
-				);
+				concurrency::parallel_for(size_t(0), mortons.size(), [&](uint32_t i_leaf) {
+					build_lbvh(
+						&m_rootNode,
+						m_internals.data(),
+						triangles,
+						nTriangles,
+						sortedTriangleIndices.data(),
+						m_deltas.data(),
+						i_leaf
+					);
+				});
+			}
+			else
+			{
+				for (uint32_t i_leaf = 0; i_leaf < mortons.size(); i_leaf++)
+				{
+					build_lbvh(
+						&m_rootNode,
+						m_internals.data(),
+						triangles,
+						nTriangles,
+						sortedTriangleIndices.data(),
+						m_deltas.data(),
+						i_leaf
+					);
+				}
 			}
 		}
+#if defined( ENABLE_EMBREE_BUILDER )
+		void buildByEmbree(const Triangle* triangles, int nTriangles)
+		{
+			RTCDevice device = rtcNewDevice("");
+			RTCBVH bvh = rtcNewBVH(device);
+
+			rtcSetDeviceErrorFunction(device, [](void* userPtr, RTCError code, const char* str) {
+				printf("Embree Error [%d] %s\n", code, str);
+			}, 0);
+
+			std::vector<RTCBuildPrimitive> primitives(nTriangles);
+			for (int i = 0; i < nTriangles; i++)
+			{
+				AABB aabb; aabb.setEmpty();
+				for (auto v : triangles[i].vs)
+				{
+					aabb.extend(v);
+				}
+				RTCBuildPrimitive prim = {};
+				prim.lower_x = aabb.lower.x;
+				prim.lower_y = aabb.lower.y;
+				prim.lower_z = aabb.lower.z;
+				prim.geomID = 0;
+				prim.upper_x = aabb.upper.x;
+				prim.upper_y = aabb.upper.y;
+				prim.upper_z = aabb.upper.z;
+				prim.primID = i;
+				primitives[i] = prim;
+			}
+
+			// allocation
+			m_internals.clear();
+			m_internals.resize(nTriangles  - 1);
+
+			EmbreeBVHContext context;
+			context.nodes = m_internals.data();
+
+			RTCBuildArguments arguments = rtcDefaultBuildArguments();
+			arguments.maxDepth = 64;
+			arguments.byteSize = sizeof(arguments);
+			arguments.buildQuality = RTC_BUILD_QUALITY_LOW;
+			arguments.maxBranchingFactor = 2;
+			arguments.bvh = bvh;
+			arguments.primitives = primitives.data();
+			arguments.primitiveCount = primitives.size();
+			arguments.primitiveArrayCapacity = primitives.size();
+			arguments.minLeafSize = 1;
+			arguments.maxLeafSize = 1;
+			arguments.createNode = embrreeCreateNode;
+			arguments.setNodeChildren = embreeSetNodeChildren;
+			arguments.setNodeBounds = embreeSetNodeBounds;
+			arguments.createLeaf = embreeCreateLeaf;
+			arguments.splitPrimitive = nullptr;
+			arguments.userPtr = &context;
+			void* bvh_root = rtcBuildBVH(&arguments);
+
+			rtcReleaseBVH(bvh);
+			rtcReleaseDevice(device);
+
+			m_rootNode = ptr2node(bvh_root);
+		}
+#endif
 		bool empty() const
 		{
 			return m_internals.empty();
 		}
 		void validate() const
 		{
-			minimum_lbvh::validate_lbvh(m_rootNode, m_internals.data(), m_deltas.data(), INT_MAX);
+			validate_lbvh(m_rootNode, m_internals.data(), m_deltas.data(), INT_MAX);
 		}
 
-		minimum_lbvh::NodeIndex m_rootNode;
-		std::vector<minimum_lbvh::InternalNode> m_internals;
+		NodeIndex m_rootNode;
+		std::vector<InternalNode> m_internals;
 		std::vector<uint8_t> m_deltas;
 	};
 }

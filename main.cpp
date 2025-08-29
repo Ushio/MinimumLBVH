@@ -5,8 +5,8 @@
 #include <sstream>
 #include <stack>
 
+#define ENABLE_EMBREE_BUILDER
 #include "minimum_lbvh.h"
-#include <embree4/rtcore.h>
 
 inline glm::vec3 to(float3 p)
 {
@@ -274,75 +274,6 @@ void intersect_stackfree(
     }
 }
 
-
-
-
-// embree
-struct EmbreeBVHContext
-{
-    EmbreeBVHContext() {
-        nodes = 0;
-        nodeHead = 0;
-    }
-    minimum_lbvh::InternalNode* nodes;
-    std::atomic<int> nodeHead;
-};
-
-inline void* node2ptr(minimum_lbvh::NodeIndex node)
-{
-    uint32_t data;
-    memcpy(&data, &node, sizeof(uint32_t));
-    return (char*)0 + data;
-}
-inline minimum_lbvh::NodeIndex ptr2node(void* ptr)
-{
-    uint32_t data = (char*)ptr - (char*)0;
-    minimum_lbvh::NodeIndex node;
-    memcpy(&node, &data, sizeof(uint32_t));
-    return node;
-}
-
-static void* embrreeCreateNode(RTCThreadLocalAllocator alloc, unsigned int numChildren, void* userPtr)
-{
-    PR_ASSERT(numChildren == 2);
-
-    EmbreeBVHContext* context = (EmbreeBVHContext*)userPtr;
-    int index = context->nodeHead++;
-
-    minimum_lbvh::NodeIndex node(index, false);
-    return node2ptr(node);
-}
-static void embreeSetNodeChildren(void* nodePtr, void** childPtr, unsigned int numChildren, void* userPtr)
-{
-    PR_ASSERT(numChildren == 2);
-
-    EmbreeBVHContext* context = (EmbreeBVHContext*)userPtr;
-    minimum_lbvh::InternalNode& node = context->nodes[ptr2node(nodePtr).m_index];
-    for (int i = 0; i < numChildren; i++)
-    {
-        node.children[i] = ptr2node(childPtr[i]);
-    }
-}
-static void embreeSetNodeBounds(void* nodePtr, const RTCBounds** bounds, unsigned int numChildren, void* userPtr)
-{
-    PR_ASSERT(numChildren == 2);
-
-    EmbreeBVHContext* context = (EmbreeBVHContext*)userPtr;
-    minimum_lbvh::InternalNode& node = context->nodes[ptr2node(nodePtr).m_index];
-    
-    for (int i = 0; i < numChildren; i++)
-    {
-        node.aabbs[i].lower = make_float3(bounds[i]->lower_x, bounds[i]->lower_y, bounds[i]->lower_z);
-        node.aabbs[i].upper = make_float3(bounds[i]->upper_x, bounds[i]->upper_y, bounds[i]->upper_z);
-    }
-}
-static void* embreeCreateLeaf(RTCThreadLocalAllocator alloc, const RTCBuildPrimitive* prims, size_t numPrims, void* userPtr)
-{
-    PR_ASSERT(numPrims == 1);
-    minimum_lbvh::NodeIndex node(prims->primID, true /*is leaf*/);
-    return node2ptr(node);
-}
-
 struct TriangleAttrib
 {
     float3 shadingNormals[3];
@@ -458,97 +389,16 @@ int main() {
 
             if (builder.empty())
             {
-#if 1
-//#if 0
-//                for (uint32_t i_leaf = 0; i_leaf < mortons.size(); i_leaf++)
-//                {
-//                    minimum_lbvh::build_lbvh(
-//                        &rootNode,
-//                        internals.data(),
-//                        triangles.data(),
-//                        triangles.size(),
-//                        sortedTriangleIndices.data(),
-//                        deltas.data(),
-//                        i_leaf
-//                    );
-//                }
-//#else
-//                ParallelFor(mortons.size(), [&](int i_leaf) {
-//                    minimum_lbvh::build_lbvh(
-//                        &rootNode,
-//                        internals.data(),
-//                        triangles.data(),
-//                        triangles.size(),
-//                        sortedTriangleIndices.data(),
-//                        deltas.data(),
-//                        i_leaf
-//                    );
-//                });
-//#endif
+#if 0
                 Stopwatch sw;
-                builder.build(triangles.data(), triangles.size());
+                builder.build(triangles.data(), triangles.size(), true /* isParallel */);
                 printf("build %f\n", sw.elapsed());
 
                 builder.validate();
-
-                // triangles
 #else
-                RTCDevice device = rtcNewDevice("");
-                RTCBVH bvh = rtcNewBVH(device);
-
-                rtcSetDeviceErrorFunction(device, [](void* userPtr, RTCError code, const char* str) {
-                    printf("Embree Error [%d] %s\n", code, str);
-                }, 0);
-
-                std::vector<RTCBuildPrimitive> primitives(triangles.size());
-                for (int i = 0; i < triangles.size(); i++)
-                {
-                    minimum_lbvh::AABB aabb; aabb.setEmpty();
-                    for (auto v : triangles[i].vs)
-                    {
-                        aabb.extend(v);
-                    }
-                    RTCBuildPrimitive prim = {};
-                    prim.lower_x = aabb.lower.x;
-                    prim.lower_y = aabb.lower.y;
-                    prim.lower_z = aabb.lower.z;
-                    prim.geomID = 0;
-                    prim.upper_x = aabb.upper.x;
-                    prim.upper_y = aabb.upper.y;
-                    prim.upper_z = aabb.upper.z;
-                    prim.primID = i;
-                    primitives[i] = prim;
-                }
-                
-                // allocation
-                internals.resize(triangles.size() - 1);
-
-                EmbreeBVHContext context;
-                context.nodes = internals.data();
-
-                RTCBuildArguments arguments = rtcDefaultBuildArguments();
-                arguments.maxDepth = 64;
-                arguments.byteSize = sizeof(arguments);
-                arguments.buildQuality = RTC_BUILD_QUALITY_LOW;
-                arguments.maxBranchingFactor = 2;
-                arguments.bvh = bvh;
-                arguments.primitives = primitives.data();
-                arguments.primitiveCount = primitives.size();
-                arguments.primitiveArrayCapacity = primitives.size();
-                arguments.minLeafSize = 1;
-                arguments.maxLeafSize = 1;
-                arguments.createNode = embrreeCreateNode;
-                arguments.setNodeChildren = embreeSetNodeChildren;
-                arguments.setNodeBounds = embreeSetNodeBounds;
-                arguments.createLeaf = embreeCreateLeaf;
-                arguments.splitPrimitive = nullptr;
-                arguments.userPtr = &context;
-                void* bvh_root = rtcBuildBVH(&arguments);
-
-                rtcReleaseBVH(bvh);
-                rtcReleaseDevice(device);
-
-                rootNode = ptr2node(bvh_root);
+                Stopwatch sw;
+                builder.buildByEmbree(triangles.data(), triangles.size());
+                printf("embree build %f\n", sw.elapsed());
 #endif
             }
         });
@@ -569,7 +419,7 @@ int main() {
                 rayGenerator.shoot(&ro, &rd, i, j, 0.5f, 0.5f);
 
                 Hit hit;
-                intersect_stackfree(&hit, builder.m_internals.data(), triangles.data(), builder.m_rootNode, to(ro), to(rd), invRd(to(rd)));
+                intersect(&hit, builder.m_internals.data(), triangles.data(), builder.m_rootNode, to(ro), to(rd), invRd(to(rd)));
                 if (hit.t != FLT_MAX)
                 {
                     float3 n = normalize(hit.ng);
