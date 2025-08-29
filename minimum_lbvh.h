@@ -595,4 +595,152 @@ namespace minimum_lbvh
 		std::vector<InternalNode> m_internals;
 		std::vector<uint8_t> m_deltas;
 	};
+	struct Hit
+	{
+		float t = FLT_MAX;
+		float2 uv = {};
+		float3 ng = {};
+		uint32_t triangleIndex = 0xFFFFFFFF;
+	};
+
+	inline float3 invRd(float3 rd)
+	{
+		return clamp(1.0f / rd, -FLT_MAX, FLT_MAX);
+	}
+
+	// stackful traversal for reference
+	inline void intersect_stackfull(
+		Hit* hit,
+		const InternalNode* nodes,
+		const Triangle* triangles,
+		NodeIndex rootNode,
+		float3 ro,
+		float3 rd,
+		float3 one_over_rd)
+	{
+		int sp = 1;
+		NodeIndex stack[64];
+		stack[0] = rootNode;
+
+		while (sp)
+		{
+			NodeIndex node = stack[--sp];
+
+			if (node.m_isLeaf)
+			{
+				float t;
+				float u, v;
+				float3 ng;
+				const Triangle& tri = triangles[node.m_index];
+				if (intersectRayTriangle(&t, &u, &v, &ng, 0.0f, hit->t, ro, rd, tri.vs[0], tri.vs[1], tri.vs[2]))
+				{
+					hit->t = t;
+					hit->uv = make_float2(u, v);
+					hit->ng = ng;
+					hit->triangleIndex = node.m_index;
+				}
+				continue;
+			}
+
+			const AABB& L = nodes[node.m_index].aabbs[0];
+			const AABB& R = nodes[node.m_index].aabbs[1];
+
+			float2 rangeL = slabs(ro, one_over_rd, L.lower, L.upper);
+			float2 rangeR = slabs(ro, one_over_rd, R.lower, R.upper);
+			bool hitL = rangeL.x <= rangeL.y;
+			bool hitR = rangeR.x <= rangeR.y;
+
+			if (hitL && hitR)
+			{
+				int mask = 0x0;
+				if (rangeR.x < rangeL.x)
+				{
+					mask = 0x1;
+				}
+				stack[sp++] = nodes[node.m_index].children[1 ^ mask];
+				stack[sp++] = nodes[node.m_index].children[0 ^ mask];
+			}
+			else if (hitL || hitR)
+			{
+				stack[sp++] = nodes[node.m_index].children[hitL ? 0 : 1];
+			}
+		}
+	}
+
+	inline void intersect(
+		Hit* hit,
+		const InternalNode* nodes,
+		const Triangle* triangles,
+		NodeIndex node,
+		float3 ro,
+		float3 rd,
+		float3 one_over_rd)
+	{
+		NodeIndex curr_node = node;
+		NodeIndex prev_node = NodeIndex::invalid();
+
+		while (curr_node != NodeIndex::invalid())
+		{
+			if (curr_node.m_isLeaf)
+			{
+				float t;
+				float u, v;
+				float3 ng;
+				const Triangle& tri = triangles[curr_node.m_index];
+				if (intersectRayTriangle(&t, &u, &v, &ng, 0.0f, hit->t, ro, rd, tri.vs[0], tri.vs[1], tri.vs[2]))
+				{
+					hit->t = t;
+					hit->uv = make_float2(u, v);
+					hit->triangleIndex = curr_node.m_index;
+					hit->ng = ng;
+				}
+
+				std::swap(curr_node, prev_node);
+				continue;
+			}
+
+			AABB L = nodes[curr_node.m_index].aabbs[0];
+			AABB R = nodes[curr_node.m_index].aabbs[1];
+			float2 rangeL = slabs(ro, one_over_rd, L.lower, L.upper);
+			float2 rangeR = slabs(ro, one_over_rd, R.lower, R.upper);
+			bool hitL = rangeL.x <= rangeL.y;
+			bool hitR = rangeR.x <= rangeR.y;
+
+			NodeIndex parent_node = nodes[curr_node.m_index].parent;
+			NodeIndex near_node = nodes[curr_node.m_index].children[0];
+			NodeIndex far_node = nodes[curr_node.m_index].children[1];
+
+			int nHits = 0;
+			if (hitL && hitR)
+			{
+				if (rangeR.x < rangeL.x)
+				{
+					std::swap(near_node, far_node);
+				}
+				nHits = 2;
+			}
+			else if (hitL || hitR)
+			{
+				nHits = 1;
+				near_node = hitR ? far_node : near_node;
+			}
+
+			NodeIndex next_node;
+			if (prev_node == parent_node)
+			{
+				next_node = 0 < nHits ? near_node : parent_node;
+			}
+			else if (prev_node == near_node)
+			{
+				next_node = nHits == 2 ? far_node : parent_node;
+			}
+			else
+			{
+				next_node = parent_node;
+			}
+
+			prev_node = curr_node;
+			curr_node = next_node;
+		}
+	}
 }
