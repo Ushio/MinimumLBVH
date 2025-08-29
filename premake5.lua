@@ -58,6 +58,55 @@ project "main"
         optimize "Full"
     filter{}
 
+project "main_gpu"
+    kind "ConsoleApp"
+    language "C++"
+    targetdir "bin/"
+    systemversion "latest"
+    flags { "MultiProcessorCompile", "NoPCH" }
+
+    -- Src
+    files { "main_gpu.cpp" }
+
+    -- Orochi
+    includedirs { "libs/orochi" }
+    files { "libs/orochi/Orochi/Orochi.h" }
+    files { "libs/orochi/Orochi/Orochi.cpp" }
+    includedirs { "libs/orochi/contrib/hipew/include" }
+    files { "libs/orochi/contrib/hipew/src/hipew.cpp" }
+    includedirs { "libs/orochi/contrib/cuew/include" }
+    files { "libs/orochi/contrib/cuew/src/cuew.cpp" }
+    links { "version" }
+    
+    -- Cuda
+    defines {"OROCHI_ENABLE_CUEW"}
+    includedirs {"$(CUDA_PATH)/include"}
+
+    -- prlib
+    -- setup command
+    -- git submodule add https://github.com/Ushio/prlib libs/prlib
+    -- premake5 vs2017
+    dependson { "prlib" }
+    includedirs { "libs/prlib/src" }
+    libdirs { "libs/prlib/bin" }
+    filter {"Debug"}
+        links { "prlib_d" }
+    filter {"Release"}
+        links { "prlib" }
+    filter{}
+
+    symbols "On"
+
+    filter {"Debug"}
+        runtime "Debug"
+        targetname ("Main_Debug")
+        optimize "Off"
+    filter {"Release"}
+        runtime "Release"
+        targetname ("Main")
+        optimize "Full"
+    filter{}
+
 project "unittest"
     kind "ConsoleApp"
     language "C++"
@@ -95,3 +144,13 @@ project "unittest"
         targetname ("Unittest")
         optimize "Full"
     filter{}
+
+project "copying"    
+    kind "ConsoleApp"
+    language "C++"
+    targetdir "bin/"
+    systemversion "latest"
+    flags { "MultiProcessorCompile", "NoPCH" }
+    postbuildcommands { 
+        "{COPYFILE} ../libs/orochi/contrib/bin/win64/*.dll ../bin"
+    }
