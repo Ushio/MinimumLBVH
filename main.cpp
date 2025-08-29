@@ -389,7 +389,7 @@ int main() {
 
             if (builder.empty())
             {
-#if 0
+#if 1
                 Stopwatch sw;
                 builder.build(triangles.data(), triangles.size(), true /* isParallel */);
                 printf("build %f\n", sw.elapsed());
@@ -419,7 +419,7 @@ int main() {
                 rayGenerator.shoot(&ro, &rd, i, j, 0.5f, 0.5f);
 
                 Hit hit;
-                intersect(&hit, builder.m_internals.data(), triangles.data(), builder.m_rootNode, to(ro), to(rd), invRd(to(rd)));
+                intersect_stackfree(&hit, builder.m_internals.data(), triangles.data(), builder.m_rootNode, to(ro), to(rd), invRd(to(rd)));
                 if (hit.t != FLT_MAX)
                 {
                     float3 n = normalize(hit.ng);

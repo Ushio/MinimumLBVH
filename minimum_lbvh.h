@@ -407,10 +407,18 @@ namespace minimum_lbvh
 		MINIMUM_LBVH_ASSERT(numChildren == 2);
 
 		EmbreeBVHContext* context = (EmbreeBVHContext*)userPtr;
-		InternalNode& node = context->nodes[ptr2node(nodePtr).m_index];
+		NodeIndex theParentIndex = ptr2node(nodePtr);
+		InternalNode& node = context->nodes[theParentIndex.m_index];
 		for (int i = 0; i < numChildren; i++)
 		{
-			node.children[i] = ptr2node(childPtr[i]);
+			NodeIndex childIndex = ptr2node(childPtr[i]);
+			node.children[i] = childIndex;
+
+			// add a link child to parent
+			if (childIndex.m_isLeaf == 0)
+			{
+				context->nodes[childIndex.m_index].parent = theParentIndex;
+			}
 		}
 	}
 	static void embreeSetNodeBounds(void* nodePtr, const RTCBounds** bounds, unsigned int numChildren, void* userPtr)
@@ -571,6 +579,7 @@ namespace minimum_lbvh
 			rtcReleaseDevice(device);
 
 			m_rootNode = ptr2node(bvh_root);
+			m_internals[m_rootNode.m_index].parent = NodeIndex::invalid();
 		}
 #endif
 		bool empty() const
