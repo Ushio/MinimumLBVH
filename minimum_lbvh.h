@@ -244,7 +244,7 @@ namespace minimum_lbvh
 		const Triangle* triangles,
 		int nTriangles,
 		const uint8_t* deltas,
-		int i_leaf,
+		uint32_t i_leaf,
 		uint32_t triangleIndex )
 	{
 		int nInternals = nTriangles - 1;
