@@ -389,7 +389,7 @@ int main() {
 
             if (builder.empty())
             {
-#if 1
+#if 0
                 Stopwatch sw;
                 builder.build(triangles.data(), triangles.size(), true /* isParallel */);
                 printf("build %f\n", sw.elapsed());
@@ -397,7 +397,7 @@ int main() {
                 builder.validate();
 #else
                 Stopwatch sw;
-                builder.buildByEmbree(triangles.data(), triangles.size());
+                builder.buildByEmbree(triangles.data(), triangles.size(), RTC_BUILD_QUALITY_LOW);
                 printf("embree build %f\n", sw.elapsed());
 #endif
             }

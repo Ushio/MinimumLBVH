@@ -520,7 +520,7 @@ namespace minimum_lbvh
 			}
 		}
 #if defined( ENABLE_EMBREE_BUILDER )
-		void buildByEmbree(const Triangle* triangles, int nTriangles)
+		void buildByEmbree(const Triangle* triangles, int nTriangles, RTCBuildQuality buildQuality)
 		{
 			RTCDevice device = rtcNewDevice("");
 			RTCBVH bvh = rtcNewBVH(device);
@@ -559,7 +559,7 @@ namespace minimum_lbvh
 			RTCBuildArguments arguments = rtcDefaultBuildArguments();
 			arguments.maxDepth = 64;
 			arguments.byteSize = sizeof(arguments);
-			arguments.buildQuality = RTC_BUILD_QUALITY_LOW;
+			arguments.buildQuality = buildQuality;
 			arguments.maxBranchingFactor = 2;
 			arguments.bvh = bvh;
 			arguments.primitives = primitives.data();
