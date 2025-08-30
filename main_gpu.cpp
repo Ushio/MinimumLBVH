@@ -9,6 +9,8 @@
 #include "tinyhiponesweep.h"
 #include "minimum_lbvh.h"
 
+#include "typedbuffer.h"
+
 inline glm::vec3 to(float3 p)
 {
     return { p.x, p.y, p.z };
@@ -88,48 +90,37 @@ int main() {
     for (int j = 0; j < 10000; j++)
     {
         int N = (1u << 23) + 3;
-        std::vector<ValType> xs(N);
-        std::vector<uint32_t> indices(N);
+
+        TypedBuffer<ValType> xs(TYPED_BUFFER_HOST);
+        TypedBuffer<uint32_t> indices(TYPED_BUFFER_HOST);
+        xs.allocate(N);
+        indices.allocate(N);
         for (int i = 0; i < N; i++)
         {
             xs[i] = rng.uniformi();
             indices[i] = i;
         }
 
-        ValType* xsBuffer;
-        ValType* xsTmp;
-        uint32_t* indicesBuffer;
-        uint32_t* indicesTmp;
-        oroMalloc((void**)&xsBuffer, sizeof(ValType) * xs.size());
-        oroMalloc((void**)&xsTmp, sizeof(ValType) * xs.size());
-
-        oroMalloc((void**)&indicesBuffer, sizeof(uint32_t) * xs.size());
-        oroMalloc((void**)&indicesTmp, sizeof(uint32_t) * xs.size());
-
-        oroMemcpyHtoD(xsBuffer, xs.data(), sizeof(ValType) * xs.size());
-        oroMemcpyHtoD(indicesBuffer, indices.data(), sizeof(uint32_t) * xs.size());
+        TypedBuffer<ValType> xsBuffer = xs.toDevice();
+        TypedBuffer<uint32_t> indicesBuffer = indices.toDevice();
+        TypedBuffer<ValType> xsTmp(TYPED_BUFFER_DEVICE);
+        TypedBuffer<uint32_t> indicesTmp(TYPED_BUFFER_DEVICE);
+        xsTmp.allocate(xs.size());
+        indicesTmp.allocate(xs.size());
 
         DeviceStopwatch sw(0);
         sw.start();
-        onesweep.sort({ xsBuffer, indicesBuffer }, { xsTmp, indicesTmp }, N, 0, sizeof(ValType) * 8, 0);
+        onesweep.sort({ xsBuffer.data(), indicesBuffer.data() }, { xsTmp.data(), indicesTmp.data() }, N, 0, sizeof(ValType) * 8, 0);
         sw.stop();
         printf("%f\n", sw.getElapsedMs());
 
-        std::vector<ValType> sortedXs(xs.size());
-        std::vector<uint32_t> sortedIndices(xs.size());
-        oroMemcpyDtoH(sortedXs.data(), xsBuffer, sizeof(ValType) * xs.size());
-        oroMemcpyDtoH(sortedIndices.data(), indicesBuffer, sizeof(uint32_t) * xs.size());
-
+        TypedBuffer<ValType> sortedXs = xsBuffer.toHost();
+        TypedBuffer<uint32_t> sortedIndices = indicesBuffer.toHost();
         for (int i = 0; i < N - 1; i++)
         {
             MINIMUM_LBVH_ASSERT(sortedXs[i] == xs[sortedIndices[i]]);
             MINIMUM_LBVH_ASSERT(sortedXs[i] <= sortedXs[i + 1]);
         }
-
-        oroFree(xsBuffer);
-        oroFree(xsTmp);
-        oroFree(indicesBuffer);
-        oroFree(indicesTmp);
     }
 
     Config config;
