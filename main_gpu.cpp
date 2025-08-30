@@ -237,7 +237,6 @@ int main() {
         ImGui::Text("fps = %f", GetFrameRate());
         ImGui::Checkbox("showWire", &showWire);
         ImGui::Checkbox("smooth", &smooth);
-        ImGui::InputInt("debug index", &g_debug_index);
 
         ImGui::End();
 
