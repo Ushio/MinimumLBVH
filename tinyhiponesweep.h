@@ -64,7 +64,6 @@ using u16 = unsigned short;
 using u32 = unsigned int;
 using u64 = unsigned long long;
 
-using RADIX_SORT_KEY_TYPE = u32;
 using RADIX_SORT_VALUE_TYPE = u32;
 
 #if defined( DESCENDING_ORDER )
@@ -133,7 +132,8 @@ __device__ inline T scanExclusive( T prefix, T* sMemIO, int nElement )
 	return sum;
 }
 
-extern "C" __global__ void onesweep_count( RADIX_SORT_KEY_TYPE* inputs, u32 numberOfInputs, u32* gpSumBuffer, u32 startBits, u32* counter )
+template <class RADIX_SORT_KEY_TYPE>
+__device__ inline void onesweep_count( RADIX_SORT_KEY_TYPE* inputs, u32 numberOfInputs, u32* gpSumBuffer, u32 startBits, u32* counter )
 {
 	__shared__ u32 localCounters[sizeof( RADIX_SORT_KEY_TYPE )][BIN_SIZE];
 
@@ -191,7 +191,16 @@ extern "C" __global__ void onesweep_count( RADIX_SORT_KEY_TYPE* inputs, u32 numb
 	}
 }
 
-template <bool keyPair>
+extern "C" __global__ void onesweep_count32( u32* inputs, u32 numberOfInputs, u32* gpSumBuffer, u32 startBits, u32* counter )
+{
+    onesweep_count(inputs, numberOfInputs, gpSumBuffer, startBits, counter);
+}
+extern "C" __global__ void onesweep_count64( u64* inputs, u32 numberOfInputs, u32* gpSumBuffer, u32 startBits, u32* counter )
+{
+    onesweep_count(inputs, numberOfInputs, gpSumBuffer, startBits, counter);
+}
+
+template <bool keyPair, class RADIX_SORT_KEY_TYPE>
 __device__ __forceinline__ void onesweep_reorder( RADIX_SORT_KEY_TYPE* inputKeys, RADIX_SORT_KEY_TYPE* outputKeys, RADIX_SORT_VALUE_TYPE* inputValues, RADIX_SORT_VALUE_TYPE* outputValues, u32 numberOfInputs, u32* gpSumBuffer,
 												  volatile u64* lookBackBuffer, u32* tailIterator, u32 startBits, u32 iteration )
 {
@@ -491,26 +500,73 @@ __device__ __forceinline__ void onesweep_reorder( RADIX_SORT_KEY_TYPE* inputKeys
 		}
 	}
 }
-extern "C" __global__ void __launch_bounds__( REORDER_NUMBER_OF_THREADS_PER_BLOCK ) onesweep_reorderKey( RADIX_SORT_KEY_TYPE* inputKeys, RADIX_SORT_KEY_TYPE* outputKeys, u32 numberOfInputs, u32* gpSumBuffer, volatile u64* lookBackBuffer, u32* tailIterator, u32 startBits,
-												  u32 iteration )
+extern "C" __global__ void __launch_bounds__( REORDER_NUMBER_OF_THREADS_PER_BLOCK ) onesweep_reorderKey32( 
+    u32* inputKeys, 
+    u32* outputKeys, 
+    u32 numberOfInputs, 
+    u32* gpSumBuffer, 
+    volatile u64* lookBackBuffer, 
+    u32* tailIterator, 
+    u32 startBits,
+    u32 iteration )
 {
 	onesweep_reorder<false /*keyPair*/>( inputKeys, outputKeys, nullptr, nullptr, numberOfInputs, gpSumBuffer, lookBackBuffer, tailIterator, startBits, iteration );
 }
-extern "C" __global__ void __launch_bounds__( REORDER_NUMBER_OF_THREADS_PER_BLOCK ) onesweep_reorderKeyPair( RADIX_SORT_KEY_TYPE* inputKeys, RADIX_SORT_KEY_TYPE* outputKeys, RADIX_SORT_VALUE_TYPE* inputValues, RADIX_SORT_VALUE_TYPE* outputValues,
-																											   u32 numberOfInputs,
-																								   u32* gpSumBuffer,
-													  volatile u64* lookBackBuffer, u32* tailIterator, u32 startBits, u32 iteration )
+extern "C" __global__ void __launch_bounds__( REORDER_NUMBER_OF_THREADS_PER_BLOCK ) onesweep_reorderKeyPair32( 
+    u32* inputKeys, 
+    u32* outputKeys, 
+    RADIX_SORT_VALUE_TYPE* inputValues, 
+    RADIX_SORT_VALUE_TYPE* outputValues,
+    u32 numberOfInputs,
+    u32* gpSumBuffer,
+    volatile u64* lookBackBuffer, 
+    u32* tailIterator, 
+    u32 startBits,
+    u32 iteration )
 {
 	onesweep_reorder<true /*keyPair*/>( inputKeys, outputKeys, inputValues, outputValues, numberOfInputs, gpSumBuffer, lookBackBuffer, tailIterator, startBits, iteration );
 }
+
+extern "C" __global__ void __launch_bounds__( REORDER_NUMBER_OF_THREADS_PER_BLOCK ) onesweep_reorderKey64( 
+    u64* inputKeys, 
+    u64* outputKeys, 
+    u32 numberOfInputs, 
+    u32* gpSumBuffer, 
+    volatile u64* lookBackBuffer, 
+    u32* tailIterator, 
+    u32 startBits, 
+    u32 iteration )
+{
+	onesweep_reorder<false /*keyPair*/>( inputKeys, outputKeys, nullptr, nullptr, numberOfInputs, gpSumBuffer, lookBackBuffer, tailIterator, startBits, iteration );
+}
+extern "C" __global__ void __launch_bounds__( REORDER_NUMBER_OF_THREADS_PER_BLOCK ) onesweep_reorderKeyPair64(
+    u64* inputKeys, 
+    u64* outputKeys, 
+    RADIX_SORT_VALUE_TYPE* inputValues, 
+    RADIX_SORT_VALUE_TYPE* outputValues,
+    u32 numberOfInputs,
+    u32* gpSumBuffer,
+    volatile u64* lookBackBuffer, 
+    u32* tailIterator, 
+    u32 startBits, 
+    u32 iteration )
+{
+	onesweep_reorder<true /*keyPair*/>( inputKeys, outputKeys, inputValues, outputValues, numberOfInputs, gpSumBuffer, lookBackBuffer, tailIterator, startBits, iteration );
+}
+
 )";
 
 constexpr uint64_t div_round_up64(uint64_t val, uint64_t divisor) noexcept { return (val + divisor - 1) / divisor; }
 constexpr uint64_t next_multiple64(uint64_t val, uint64_t divisor) noexcept { return div_round_up64(val, divisor) * divisor; }
 
-struct KeyValueSoA
+struct KeyValueSoA32
 {
 	uint32_t* key;
+	uint32_t* value;
+};
+struct KeyValueSoA64
+{
+	uint64_t* key;
 	uint32_t* value;
 };
 class OnesweepSort
@@ -533,7 +589,17 @@ public:
 	OnesweepSort(const OnesweepSort&) = delete;
 	void operator=(const OnesweepSort&) = delete;
 
-	void sort(const KeyValueSoA& elementsToSort, const KeyValueSoA& tmp, uint32_t n, int startBit, int endBit, oroStream stream)
+	void sort(const KeyValueSoA32& elementsToSort, const KeyValueSoA32& tmp, uint32_t n, int startBit, int endBit, oroStream stream)
+	{
+		sort(elementsToSort, tmp, n, startBit, endBit, stream, false /*is64bit*/);
+	}
+	void sort(const KeyValueSoA64& elementsToSort, const KeyValueSoA64& tmp, uint32_t n, int startBit, int endBit, oroStream stream)
+	{
+		sort(elementsToSort, tmp, n, startBit, endBit, stream, true /*is64bit*/);
+	}
+private:
+	template <class KeyValueSoAT>
+	void sort(const KeyValueSoAT& elementsToSort, const KeyValueSoAT& tmp, uint32_t n, int startBit, int endBit, oroStream stream, bool is64bit )
 	{
 		bool keyPair = elementsToSort.value != nullptr;
 
@@ -541,17 +607,17 @@ public:
 		uint64_t numberOfBlocks = div_round_up64(n, RADIX_SORT_BLOCK_SIZE);
 
 		// Buffers
-		uint64_t gpSumBufferBytes = sizeof(uint32_t) * BIN_SIZE * sizeof(uint32_t /* key type */);
-		uint64_t lookBackBufferBytes = sizeof(uint64_t) * (BIN_SIZE * LOOKBACK_TABLE_SIZE);
-		oroMemsetD8Async(m_gpSumBuffer, 0, gpSumBufferBytes, stream);
-		oroMemsetD8Async(m_lookbackBuffer, 0, lookBackBufferBytes, stream);
+		oroMemsetD8Async(m_gpSumBuffer, 0, m_gpSumBufferBytes, stream);
+		oroMemsetD8Async(m_lookbackBuffer, 0, m_lookBackBufferBytes, stream);
 		oroMemsetD32Async(m_gpSumCounter, 0, 1, stream);
 		oroMemsetD32Async(m_tailIterator, 0, 1, stream);
 
+		FunctionSet funcset = is64bit ? m_func64 : m_func32;
+
 		{
 			const void* args[] = { &elementsToSort.key, &n, &m_gpSumBuffer, &startBit, &m_gpSumCounter };
-			oroModuleLaunchKernel(m_count, 
-				m_blocksForCount, 1, 1,
+			oroModuleLaunchKernel(funcset.count,
+				funcset.blocksForCount, 1, 1,
 				ONESWEEP_COUNT_THREADS_PER_BLOCK, 1, 1,
 				0, /* shared */
 				stream,
@@ -567,7 +633,7 @@ public:
 			if (keyPair)
 			{
 				const void* args[] = { &s.key, &d.key, &s.value, &d.value, &n, &m_gpSumBuffer, &m_lookbackBuffer, &m_tailIterator, &startBit, &i };
-				oroModuleLaunchKernel(m_reorderKeyPair,
+				oroModuleLaunchKernel(funcset.reorderKeyPair,
 					numberOfBlocks, 1, 1,
 					REORDER_NUMBER_OF_THREADS_PER_BLOCK, 1, 1,
 					0, /* shared */
@@ -578,7 +644,7 @@ public:
 			else
 			{
 				const void* args[] = { &s.key, &d.key, &n, &m_gpSumBuffer, &m_lookbackBuffer, &m_tailIterator, &startBit, &i };
-				oroModuleLaunchKernel(m_reorderKey,
+				oroModuleLaunchKernel(funcset.reorderKey,
 					numberOfBlocks, 1, 1,
 					REORDER_NUMBER_OF_THREADS_PER_BLOCK, 1, 1,
 					0, /* shared */
@@ -630,32 +696,50 @@ private:
 
 		oroModuleLoadData(&m_module, codec.data());
 
-		oroModuleGetFunction(&m_count, m_module, "onesweep_count");
-		oroModuleGetFunction(&m_reorderKey, m_module, "onesweep_reorderKey");
-		oroModuleGetFunction(&m_reorderKeyPair, m_module, "onesweep_reorderKeyPair");
+		oroModuleGetFunction(&m_func32.count, m_module, "onesweep_count32");
+		oroModuleGetFunction(&m_func32.reorderKey, m_module, "onesweep_reorderKey32");
+		oroModuleGetFunction(&m_func32.reorderKeyPair, m_module, "onesweep_reorderKeyPair32");
+
+		oroModuleGetFunction(&m_func64.count, m_module, "onesweep_count64");
+		oroModuleGetFunction(&m_func64.reorderKey, m_module, "onesweep_reorderKey64");
+		oroModuleGetFunction(&m_func64.reorderKeyPair, m_module, "onesweep_reorderKeyPair64");
 
 		oroDeviceProp props = {};
 		oroGetDeviceProperties(&props, device);
-		int maxBlocksPerMP = 0;
-		oroError e = oroModuleOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerMP, m_count, ONESWEEP_COUNT_THREADS_PER_BLOCK, 0);
-		m_blocksForCount = e == oroSuccess ? maxBlocksPerMP * props.multiProcessorCount : 2048;
+		{
+			int maxBlocksPerMP = 0;
+			oroError e = oroModuleOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerMP, m_func32.count, ONESWEEP_COUNT_THREADS_PER_BLOCK, 0);
+			m_func32.blocksForCount = e == oroSuccess ? maxBlocksPerMP * props.multiProcessorCount : 2048;
+		}
+		{
+			int maxBlocksPerMP = 0;
+			oroError e = oroModuleOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerMP, m_func64.count, ONESWEEP_COUNT_THREADS_PER_BLOCK, 0);
+			m_func64.blocksForCount = e == oroSuccess ? maxBlocksPerMP * props.multiProcessorCount : 2048;
+		}
 	}
 	void allocate()
 	{
-		uint64_t gpSumBufferBytes = sizeof(uint32_t) * BIN_SIZE * sizeof(uint32_t /* key type */);
-		uint64_t lookBackBufferBytes = sizeof(uint64_t) * (BIN_SIZE * LOOKBACK_TABLE_SIZE);
-		oroMalloc(&m_gpSumBuffer, gpSumBufferBytes);
-		oroMalloc(&m_lookbackBuffer, lookBackBufferBytes);
+		oroMalloc(&m_gpSumBuffer, m_gpSumBufferBytes);
+		oroMalloc(&m_lookbackBuffer, m_lookBackBufferBytes);
 
 		oroMalloc(&m_tailIterator, 4);
 		oroMalloc(&m_gpSumCounter, 4);
 	}
 
-	int m_blocksForCount = 0;
 	oroModule m_module = 0;
-	oroFunction m_count;
-	oroFunction m_reorderKey;
-	oroFunction m_reorderKeyPair;
+
+	struct FunctionSet
+	{
+		int blocksForCount;
+		oroFunction count;
+		oroFunction reorderKey;
+		oroFunction reorderKeyPair;
+	};
+	FunctionSet m_func32 = {};
+	FunctionSet m_func64 = {};
+
+	uint64_t m_gpSumBufferBytes = sizeof(uint32_t) * BIN_SIZE * sizeof(uint64_t /* key type (larger) */);
+	uint64_t m_lookBackBufferBytes = sizeof(uint64_t) * (BIN_SIZE * LOOKBACK_TABLE_SIZE);
 
 	void* m_gpSumBuffer = 0;
 	void* m_lookbackBuffer = 0;

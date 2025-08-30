@@ -83,40 +83,41 @@ int main() {
 
     tinyhiponesweep::OnesweepSort onesweep(device);
 
+    using ValType = uint64_t;
     PCG rng;
     for (int j = 0; j < 10000; j++)
     {
-        int N = (1u << 23);
-        std::vector<uint32_t> xs(N);
+        int N = (1u << 23) + 3;
+        std::vector<ValType> xs(N);
         std::vector<uint32_t> indices(N);
         for (int i = 0; i < N; i++)
         {
-            xs[i] = rng.uniform();
+            xs[i] = rng.uniformi();
             indices[i] = i;
         }
 
-        uint32_t* xsBuffer;
-        uint32_t* xsTmp;
+        ValType* xsBuffer;
+        ValType* xsTmp;
         uint32_t* indicesBuffer;
         uint32_t* indicesTmp;
-        oroMalloc((void**)&xsBuffer, sizeof(uint32_t) * xs.size());
-        oroMalloc((void**)&xsTmp, sizeof(uint32_t) * xs.size());
+        oroMalloc((void**)&xsBuffer, sizeof(ValType) * xs.size());
+        oroMalloc((void**)&xsTmp, sizeof(ValType) * xs.size());
 
         oroMalloc((void**)&indicesBuffer, sizeof(uint32_t) * xs.size());
         oroMalloc((void**)&indicesTmp, sizeof(uint32_t) * xs.size());
 
-        oroMemcpyHtoD(xsBuffer, xs.data(), sizeof(uint32_t) * xs.size());
+        oroMemcpyHtoD(xsBuffer, xs.data(), sizeof(ValType) * xs.size());
         oroMemcpyHtoD(indicesBuffer, indices.data(), sizeof(uint32_t) * xs.size());
 
         DeviceStopwatch sw(0);
         sw.start();
-        onesweep.sort({ xsBuffer, indicesBuffer }, { xsTmp, indicesTmp }, N, 0, 32, 0);
+        onesweep.sort({ xsBuffer, indicesBuffer }, { xsTmp, indicesTmp }, N, 0, sizeof(ValType) * 8, 0);
         sw.stop();
         printf("%f\n", sw.getElapsedMs());
 
-        std::vector<uint32_t> sortedXs(xs.size());
+        std::vector<ValType> sortedXs(xs.size());
         std::vector<uint32_t> sortedIndices(xs.size());
-        oroMemcpyDtoH(sortedXs.data(), xsBuffer, sizeof(uint32_t) * xs.size());
+        oroMemcpyDtoH(sortedXs.data(), xsBuffer, sizeof(ValType) * xs.size());
         oroMemcpyDtoH(sortedIndices.data(), indicesBuffer, sizeof(uint32_t) * xs.size());
 
         for (int i = 0; i < N - 1; i++)
