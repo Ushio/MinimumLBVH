@@ -23,6 +23,39 @@ struct TriangleAttrib
     float3 shadingNormals[3];
 };
 
+class DeviceStopwatch
+{
+public:
+    DeviceStopwatch(oroStream stream)
+    {
+        m_stream = stream;
+        oroEventCreateWithFlags(&m_start, oroEventDefault);
+        oroEventCreateWithFlags(&m_stop, oroEventDefault);
+    }
+    ~DeviceStopwatch()
+    {
+        oroEventDestroy(m_start);
+        oroEventDestroy(m_stop);
+    }
+    DeviceStopwatch(const DeviceStopwatch&) = delete;
+    void operator=(const DeviceStopwatch&) = delete;
+
+    void start() { oroEventRecord(m_start, m_stream); }
+    void stop() { oroEventRecord(m_stop, m_stream); }
+
+    float getElapsedMs() const
+    {
+        oroEventSynchronize(m_stop);
+        float ms = 0;
+        oroEventElapsedTime(&ms, m_start, m_stop);
+        return ms;
+    }
+private:
+    oroStream m_stream;
+    oroEvent m_start;
+    oroEvent m_stop;
+};
+
 int main() {
     using namespace pr;
 
@@ -51,22 +84,52 @@ int main() {
     tinyhiponesweep::OnesweepSort onesweep(device);
 
     PCG rng;
-    int N = 10000;
-    std::vector<uint32_t> xs(N);
-    for (int i = 0; i < N; i++)
+    for (int j = 0; j < 10000; j++)
     {
-        xs[i] = rng.uniform();
+        int N = (1u << 23);
+        std::vector<uint32_t> xs(N);
+        std::vector<uint32_t> indices(N);
+        for (int i = 0; i < N; i++)
+        {
+            xs[i] = rng.uniform();
+            indices[i] = i;
+        }
+
+        uint32_t* xsBuffer;
+        uint32_t* xsTmp;
+        uint32_t* indicesBuffer;
+        uint32_t* indicesTmp;
+        oroMalloc((void**)&xsBuffer, sizeof(uint32_t) * xs.size());
+        oroMalloc((void**)&xsTmp, sizeof(uint32_t) * xs.size());
+
+        oroMalloc((void**)&indicesBuffer, sizeof(uint32_t) * xs.size());
+        oroMalloc((void**)&indicesTmp, sizeof(uint32_t) * xs.size());
+
+        oroMemcpyHtoD(xsBuffer, xs.data(), sizeof(uint32_t) * xs.size());
+        oroMemcpyHtoD(indicesBuffer, indices.data(), sizeof(uint32_t) * xs.size());
+
+        DeviceStopwatch sw(0);
+        sw.start();
+        onesweep.sort({ xsBuffer, indicesBuffer }, { xsTmp, indicesTmp }, N, 0, 32, 0);
+        sw.stop();
+        printf("%f\n", sw.getElapsedMs());
+
+        std::vector<uint32_t> sortedXs(xs.size());
+        std::vector<uint32_t> sortedIndices(xs.size());
+        oroMemcpyDtoH(sortedXs.data(), xsBuffer, sizeof(uint32_t) * xs.size());
+        oroMemcpyDtoH(sortedIndices.data(), indicesBuffer, sizeof(uint32_t) * xs.size());
+
+        for (int i = 0; i < N - 1; i++)
+        {
+            MINIMUM_LBVH_ASSERT(sortedXs[i] == xs[sortedIndices[i]]);
+            MINIMUM_LBVH_ASSERT(sortedXs[i] <= sortedXs[i + 1]);
+        }
+
+        oroFree(xsBuffer);
+        oroFree(xsTmp);
+        oroFree(indicesBuffer);
+        oroFree(indicesTmp);
     }
-
-    uint32_t* xsBuffer;
-    uint32_t* xsTmp;
-    oroMalloc((void**)&xsBuffer, sizeof(uint32_t) * xs.size());
-    oroMalloc((void**)&xsTmp, sizeof(uint32_t) * xs.size());
-    oroMemcpyHtoD(xsBuffer, xs.data(), sizeof(uint32_t) * xs.size());
-
-    onesweep.sort({ xsBuffer, nullptr }, { xsTmp, nullptr }, N, 0, 32, 0);
-
-    oroMemcpyDtoH(xs.data(), xsBuffer, sizeof(uint32_t) * xs.size());
 
     Config config;
     config.ScreenWidth = 1920;
