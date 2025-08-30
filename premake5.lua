@@ -100,11 +100,11 @@ project "main_gpu"
 
     filter {"Debug"}
         runtime "Debug"
-        targetname ("Main_Debug")
+        targetname ("Main_GPU_Debug")
         optimize "Off"
     filter {"Release"}
         runtime "Release"
-        targetname ("Main")
+        targetname ("Main_GPU")
         optimize "Full"
     filter{}
 
