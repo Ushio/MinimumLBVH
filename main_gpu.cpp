@@ -10,6 +10,7 @@
 #include "minimum_lbvh.h"
 
 #include "typedbuffer.h"
+#include "shader.h"
 
 inline glm::vec3 to(float3 p)
 {
@@ -61,6 +62,13 @@ private:
 int main() {
     using namespace pr;
 
+    Config config;
+    config.ScreenWidth = 1920;
+    config.ScreenHeight = 1080;
+    config.SwapInterval = 1;
+    Initialize(config);
+    SetDataDir(ExecutableDir());
+
     if (oroInitialize((oroApi)(ORO_API_HIP | ORO_API_CUDA), 0))
     {
         printf("failed to init..\n");
@@ -83,6 +91,11 @@ int main() {
     printf("Device: %s\n", props.name);
     printf("Cuda: %s\n", isNvidia ? "Yes" : "No");
 
+    std::vector<std::string> options;
+    options.push_back("-I");
+    options.push_back(GetDataPath("../"));
+    Shader shader(GetDataPath("../kernel.cu").c_str(), "kernel", options);
+    
     tinyhiponesweep::OnesweepSort onesweep(device);
 
     using ValType = uint64_t;
@@ -122,12 +135,6 @@ int main() {
             MINIMUM_LBVH_ASSERT(sortedXs[i] <= sortedXs[i + 1]);
         }
     }
-
-    Config config;
-    config.ScreenWidth = 1920;
-    config.ScreenHeight = 1080;
-    config.SwapInterval = 1;
-    Initialize(config);
 
     Camera3D camera;
     camera.origin = { 8.0f, 8.0f, 8.0f };

@@ -1,11 +1,10 @@
 #pragma once
 
 #if (defined(__CUDACC__) || defined(__HIPCC__))
-#include <Orochi/Orochi.h>
-#include <stdint.h>
 #define TYPED_BUFFER_DEVICE_INLINE __device__ inline
 #define TYPED_BUFFER_ASSERT(ExpectTrue) ((void)0)
 #else
+#include <Orochi/Orochi.h>
 #define TYPED_BUFFER_DEVICE_INLINE
 #define TYPED_BUFFER_ASSERT(ExpectTrue) if((ExpectTrue) == 0) { abort(); }
 #endif

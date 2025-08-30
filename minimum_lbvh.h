@@ -9,6 +9,7 @@
 #if defined(MINIMUM_LBVH_KERNELCC)
 
 #define MINIMUM_LBVH_ASSERT(ExpectTrue) ((void)0)
+#define MINIMUM_LBVH_DEVICE __device__
 
 #else
 #include <stdint.h>
@@ -17,6 +18,7 @@
 #include <Windows.h>
 #include <ppl.h>
 #define MINIMUM_LBVH_ASSERT(ExpectTrue) if((ExpectTrue) == 0) { abort(); }
+#define MINIMUM_LBVH_DEVICE
 
 #if defined( ENABLE_EMBREE_BUILDER )
 #include <embree4/rtcore.h>
@@ -29,7 +31,7 @@
 namespace minimum_lbvh
 {
 	template <class T>
-	void swap(T* a, T* b)
+	MINIMUM_LBVH_DEVICE void swap(T* a, T* b)
 	{
 		T tmp = *a;
 		*a = *b;
@@ -37,29 +39,29 @@ namespace minimum_lbvh
 	}
 
 	template <class T>
-	inline T ss_max(T x, T y)
+	MINIMUM_LBVH_DEVICE inline T ss_max(T x, T y)
 	{
 		return (x < y) ? y : x;
 	}
 	template <class T>
-	inline T ss_min(T x, T y)
+	MINIMUM_LBVH_DEVICE inline T ss_min(T x, T y)
 	{
 		return (y < x) ? y : x;
 	}
-	inline float remap(float value, float inputMin, float inputMax, float outputMin, float outputMax)
+	MINIMUM_LBVH_DEVICE inline float remap(float value, float inputMin, float inputMax, float outputMin, float outputMax)
 	{
 		return (value - inputMin) * ((outputMax - outputMin) / (inputMax - inputMin)) + outputMin;
 	}
-	inline float compMin(float3 v)
+	MINIMUM_LBVH_DEVICE inline float compMin(float3 v)
 	{
 		return fminf(fminf(v.x, v.y), v.z);
 	}
-	inline float compMax(float3 v)
+	MINIMUM_LBVH_DEVICE inline float compMax(float3 v)
 	{
 		return fmaxf(fmaxf(v.x, v.y), v.z);
 	}
 
-	inline float2 slabs(float3 ro, float3 one_over_rd, float3 lower, float3 upper )
+	MINIMUM_LBVH_DEVICE inline float2 slabs(float3 ro, float3 one_over_rd, float3 lower, float3 upper )
 	{
 		float3 t0 = (lower - ro) * one_over_rd;
 		float3 t1 = (upper - ro) * one_over_rd;
@@ -75,7 +77,7 @@ namespace minimum_lbvh
 	}
 
 	// Return the number of consecutive high-order zero bits in a 32-bit integer
-	inline int clz(uint32_t x)
+	MINIMUM_LBVH_DEVICE inline int clz(uint32_t x)
 	{
 #if !defined( MINIMUM_LBVH_KERNELCC )
 		return __lzcnt(x);
@@ -83,7 +85,7 @@ namespace minimum_lbvh
 		return __clz(x);
 #endif
 	}
-	inline int clz64(uint64_t x)
+	MINIMUM_LBVH_DEVICE inline int clz64(uint64_t x)
 	{
 #if !defined( MINIMUM_LBVH_KERNELCC )
 		return _lzcnt_u64(x);
@@ -93,7 +95,7 @@ namespace minimum_lbvh
 	}
 
 	// Find the position of the least significant bit set to 1
-	inline int ffs(uint32_t x) {
+	MINIMUM_LBVH_DEVICE inline int ffs(uint32_t x) {
 #if !defined( MINIMUM_LBVH_KERNELCC )
 		if (x == 0)
 		{
@@ -104,7 +106,7 @@ namespace minimum_lbvh
 		return __ffs(x);
 #endif
 	}
-	inline int ffs64(uint64_t x) {
+	MINIMUM_LBVH_DEVICE inline int ffs64(uint64_t x) {
 #if !defined( MINIMUM_LBVH_KERNELCC )
 		if (x == 0)
 		{
@@ -116,16 +118,16 @@ namespace minimum_lbvh
 #endif
 	}
 
-	inline int delta(uint32_t a, uint32_t b)
+	MINIMUM_LBVH_DEVICE inline int delta(uint32_t a, uint32_t b)
 	{
 		return 32 - clz(a ^ b);
 	}
-	inline int delta(uint64_t a, uint64_t b)
+	MINIMUM_LBVH_DEVICE inline int delta(uint64_t a, uint64_t b)
 	{
 		return 64 - clz64(a ^ b);
 	}
 
-	inline uint64_t encodeMortonCode_Naive(uint32_t x, uint32_t y, uint32_t z)
+	MINIMUM_LBVH_DEVICE inline uint64_t encodeMortonCode_Naive(uint32_t x, uint32_t y, uint32_t z)
 	{
 		uint64_t code = 0;
 		for (uint64_t i = 0; i < 64 / 3; ++i)
@@ -138,7 +140,7 @@ namespace minimum_lbvh
 		return code;
 	}
 
-	inline uint32_t compact3(uint64_t m)
+	MINIMUM_LBVH_DEVICE inline uint32_t compact3(uint64_t m)
 	{
 		uint64_t x = m & 0x1249249249249249;
 		x = (x ^ (x >> 2)) & 0x10c30c30c30c30c3;
@@ -149,7 +151,7 @@ namespace minimum_lbvh
 		return static_cast<uint32_t>(x);
 	}
 
-	inline uint64_t splat3(uint32_t a)
+	MINIMUM_LBVH_DEVICE inline uint64_t splat3(uint32_t a)
 	{
 		uint64_t x = a & 0x1fffff;
 		x = (x | x << 32) & 0x1f00000000ffff;
@@ -160,13 +162,13 @@ namespace minimum_lbvh
 		return x;
 	}
 
-	inline void decodeMortonCode(uint64_t morton, uint32_t* x, uint32_t* y, uint32_t* z)
+	MINIMUM_LBVH_DEVICE inline void decodeMortonCode(uint64_t morton, uint32_t* x, uint32_t* y, uint32_t* z)
 	{
 		*x = compact3(morton);
 		*y = compact3(morton >> 1);
 		*z = compact3(morton >> 2);
 	}
-	inline uint64_t encodeMortonCode(uint32_t x, uint32_t y, uint32_t z)
+	MINIMUM_LBVH_DEVICE inline uint64_t encodeMortonCode(uint32_t x, uint32_t y, uint32_t z)
 	{
 		uint64_t answer = 0;
 		answer |= splat3(x) | splat3(y) << 1 | splat3(z) << 2;
@@ -183,24 +185,24 @@ namespace minimum_lbvh
 		float3 lower;
 		float3 upper;
 
-		void setEmpty()
+		MINIMUM_LBVH_DEVICE void setEmpty()
 		{
-			lower = make_float3(+FLT_MAX);
-			upper = make_float3(-FLT_MAX);
+			lower = make_float3(+3.402823466e+38f);
+			upper = make_float3(-3.402823466e+38f);
 		}
-		void extend(const float3& p)
+		MINIMUM_LBVH_DEVICE void extend(const float3& p)
 		{
 			lower = fminf(lower, p);
 			upper = fmaxf(upper, p);
 		}
 
-		void extend(const AABB& b)
+		MINIMUM_LBVH_DEVICE void extend(const AABB& b)
 		{
 			lower = fminf(lower, b.lower);
 			upper = fmaxf(upper, b.upper);
 		}
 
-		uint64_t encodeMortonCode(float3 p) const
+		MINIMUM_LBVH_DEVICE uint64_t encodeMortonCode(float3 p) const
 		{
 			int3 coord = make_int3((p - lower) / (upper - lower) * (float)(MORTON_MAX_VALUE_3D + 1));
 			coord = clamp(coord, 0, MORTON_MAX_VALUE_3D);
@@ -210,22 +212,22 @@ namespace minimum_lbvh
 
 	struct NodeIndex
 	{
-		NodeIndex() :m_index(0), m_isLeaf(0) {}
-		NodeIndex(uint32_t index, bool isLeaf) :m_index(index), m_isLeaf(isLeaf) {}
+		MINIMUM_LBVH_DEVICE NodeIndex() :m_index(0), m_isLeaf(0) {}
+		MINIMUM_LBVH_DEVICE NodeIndex(uint32_t index, bool isLeaf) :m_index(index), m_isLeaf(isLeaf) {}
 		uint32_t m_index : 31;
 		uint32_t m_isLeaf : 1;
 
-		static NodeIndex invalid()
+		MINIMUM_LBVH_DEVICE static NodeIndex invalid()
 		{
 			return NodeIndex(0x7FFFFFFF, false);
 		}
 	};
 
-	inline bool operator==(NodeIndex a, NodeIndex b)
+	MINIMUM_LBVH_DEVICE inline bool operator==(NodeIndex a, NodeIndex b)
 	{
 		return a.m_index == b.m_index && a.m_isLeaf == b.m_isLeaf;
 	}
-	inline bool operator!=(NodeIndex a, NodeIndex b)
+	MINIMUM_LBVH_DEVICE inline bool operator!=(NodeIndex a, NodeIndex b)
 	{
 		return !(a == b);
 	}
@@ -238,7 +240,7 @@ namespace minimum_lbvh
 		uint32_t oneOfEdges; // wasteful but for simplicity
 	};
 
-	inline void build_lbvh(
+	MINIMUM_LBVH_DEVICE inline void build_lbvh(
 		NodeIndex* rootNode,
 		InternalNode* internals,
 		const Triangle* triangles,
@@ -284,8 +286,13 @@ namespace minimum_lbvh
 
 			// == memory barrier ==
 
+#if defined(MINIMUM_LBVH_KERNELCC)
+			__threadfence();
+			index = atomicExch(&internals[parent].oneOfEdges, index);
+			__threadfence();
+#else
 			index = InterlockedExchange( &internals[parent].oneOfEdges, index );
-
+#endif
 			// == memory barrier ==
 
 			if (index == 0xFFFFFFFF)
@@ -310,7 +317,7 @@ namespace minimum_lbvh
 		}
 	}
 
-	inline bool intersectRayTriangle(float* tOut, float* uOut, float* vOut, float3* ngOut, float t_min, float t_max, float3 ro, float3 rd, float3 v0, float3 v1, float3 v2 )
+	MINIMUM_LBVH_DEVICE inline bool intersectRayTriangle(float* tOut, float* uOut, float* vOut, float3* ngOut, float t_min, float t_max, float3 ro, float3 rd, float3 v0, float3 v1, float3 v2 )
 	{
 		float3 e0 = v1 - v0;
 		float3 e1 = v2 - v1;
@@ -362,7 +369,7 @@ namespace minimum_lbvh
 		return false;
 	}
 
-	inline void validate_lbvh( NodeIndex node, const InternalNode* internals, const uint8_t* deltas, int maxDelta )
+	MINIMUM_LBVH_DEVICE inline void validate_lbvh( NodeIndex node, const InternalNode* internals, const uint8_t* deltas, int maxDelta )
 	{
 		if (node.m_isLeaf)
 		{
@@ -455,6 +462,7 @@ namespace minimum_lbvh
 		uint32_t index;
 	};
 
+#if !defined(MINIMUM_LBVH_KERNELCC)
 	class BVHCPUBuilder
 	{
 	public:
@@ -527,6 +535,7 @@ namespace minimum_lbvh
 				}
 			}
 		}
+
 #if defined( ENABLE_EMBREE_BUILDER )
 		void buildByEmbree(const Triangle* triangles, int nTriangles, RTCBuildQuality buildQuality)
 		{
@@ -596,28 +605,31 @@ namespace minimum_lbvh
 		}
 		void validate() const
 		{
-			validate_lbvh(m_rootNode, m_internals.data(), m_deltas.data(), INT_MAX);
+			validate_lbvh(m_rootNode, m_internals.data(), m_deltas.data(), 255);
 		}
 
 		NodeIndex m_rootNode;
 		std::vector<InternalNode> m_internals;
 		std::vector<uint8_t> m_deltas;
 	};
+
+#endif
+
 	struct Hit
 	{
-		float t = FLT_MAX;
+		float t = 3.402823466e+38F;
 		float2 uv = {};
 		float3 ng = {};
 		uint32_t triangleIndex = 0xFFFFFFFF;
 	};
 
-	inline float3 invRd(float3 rd)
+	MINIMUM_LBVH_DEVICE inline float3 invRd(float3 rd)
 	{
-		return clamp(1.0f / rd, -FLT_MAX, FLT_MAX);
+		return clamp(1.0f / rd, -3.402823466e+38F, 3.402823466e+38F);
 	}
 
 	// stackful traversal for reference
-	inline void intersect_stackfull(
+	MINIMUM_LBVH_DEVICE inline void intersect_stackfull(
 		Hit* hit,
 		const InternalNode* nodes,
 		const Triangle* triangles,
@@ -675,7 +687,7 @@ namespace minimum_lbvh
 		}
 	}
 
-	inline void intersect(
+	MINIMUM_LBVH_DEVICE inline void intersect(
 		Hit* hit,
 		const InternalNode* nodes,
 		const Triangle* triangles,
