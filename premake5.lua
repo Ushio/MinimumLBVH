@@ -67,6 +67,8 @@ project "main_gpu"
 
     -- Src
     files { "main_gpu.cpp" }
+    files { "minimum_lbvh.h" }
+
     files { "shader.h", "typedbuffer.h", "typedbuffer.natvis" }
 
     -- Orochi

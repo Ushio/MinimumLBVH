@@ -30,6 +30,11 @@ struct TypedBuffer
 #else
     void allocate(size_t n)
     {
+        if (m_size == n)
+        {
+            return;
+        }
+
         if (m_isDevice)
         {
             if (m_data) { oroFree((oroDeviceptr)m_data); }
@@ -63,7 +68,7 @@ struct TypedBuffer
         other.m_size = 0;
     }
 
-    TypedBuffer<T> toHost() const
+    TypedBuffer<T> copyToHost() const
     {
         TYPED_BUFFER_ASSERT(isDevice());
         TypedBuffer<T> r(TYPED_BUFFER_HOST);
@@ -71,13 +76,24 @@ struct TypedBuffer
         oroMemcpyDtoH(r.data(), (oroDeviceptr)m_data, m_size * sizeof(T));
         return r;
     }
-    TypedBuffer<T> toDevice() const
+    TypedBuffer<T> copyToDevice() const
     {
         TYPED_BUFFER_ASSERT(isDevice() == false);
         TypedBuffer<T> r(TYPED_BUFFER_DEVICE);
         r.allocate(size());
         oroMemcpyHtoD((oroDeviceptr)r.data(), m_data, m_size * sizeof(T));
         return r;
+    }
+    void copyTo(TypedBuffer<T>* to) const
+    {
+        to->allocate(size());
+        oroMemcpyKind kind =
+            isHost()
+            ?
+            (to->isHost() ? oroMemcpyHostToHost : oroMemcpyHostToDevice)
+            :
+            (to->isHost() ? oroMemcpyDeviceToHost : oroMemcpyDeviceToDevice);
+        oroMemcpy(to->data(), (oroDeviceptr)data(), size() * sizeof(T), kind);
     }
 #endif
 

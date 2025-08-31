@@ -6,6 +6,9 @@
 #include <string>
 #include <vector>
 
+constexpr uint64_t div_round_up64(uint64_t val, uint64_t divisor) noexcept { return (val + divisor - 1) / divisor; }
+constexpr uint64_t next_multiple64(uint64_t val, uint64_t divisor) noexcept { return div_round_up64(val, divisor) * divisor; }
+
 #if defined(_MSC_VER)
 #define SH_ASSERT(ExpectTrue) \
     if ((ExpectTrue) == 0) { __debugbreak(); }

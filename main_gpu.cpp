@@ -7,6 +7,8 @@
 
 #include "Orochi/Orochi.h"
 #include "tinyhiponesweep.h"
+
+#define ENABLE_GPU_BUILDER
 #include "minimum_lbvh.h"
 
 #include "typedbuffer.h"
@@ -90,51 +92,58 @@ int main() {
 
     printf("Device: %s\n", props.name);
     printf("Cuda: %s\n", isNvidia ? "Yes" : "No");
-
-    std::vector<std::string> options;
-    options.push_back("-I");
-    options.push_back(GetDataPath("../"));
-    Shader shader(GetDataPath("../kernel.cu").c_str(), "kernel", options);
     
     tinyhiponesweep::OnesweepSort onesweep(device);
 
-    using ValType = uint64_t;
-    PCG rng;
-    for (int j = 0; j < 10000; j++)
-    {
-        int N = (1u << 23) + 3;
+    //using ValType = uint64_t;
+    //PCG rng;
+    //for (int j = 0; j < 3; j++)
+    //{
+    //    int N = (1u << 23) + 3;
 
-        TypedBuffer<ValType> xs(TYPED_BUFFER_HOST);
-        TypedBuffer<uint32_t> indices(TYPED_BUFFER_HOST);
-        xs.allocate(N);
-        indices.allocate(N);
-        for (int i = 0; i < N; i++)
-        {
-            xs[i] = rng.uniformi();
-            indices[i] = i;
-        }
+    //    TypedBuffer<ValType> xs(TYPED_BUFFER_HOST);
+    //    TypedBuffer<uint32_t> indices(TYPED_BUFFER_HOST);
+    //    xs.allocate(N);
+    //    indices.allocate(N);
+    //    for (int i = 0; i < N; i++)
+    //    {
+    //        xs[i] = rng.uniformi();
+    //        indices[i] = i;
+    //    }
 
-        TypedBuffer<ValType> xsBuffer = xs.toDevice();
-        TypedBuffer<uint32_t> indicesBuffer = indices.toDevice();
-        TypedBuffer<ValType> xsTmp(TYPED_BUFFER_DEVICE);
-        TypedBuffer<uint32_t> indicesTmp(TYPED_BUFFER_DEVICE);
-        xsTmp.allocate(xs.size());
-        indicesTmp.allocate(xs.size());
+    //    TypedBuffer<ValType> xsBuffer(TYPED_BUFFER_DEVICE);
+    //    xs.copyTo(&xsBuffer);
+    //    TypedBuffer<uint32_t> indicesBuffer(TYPED_BUFFER_DEVICE);
+    //    indices.copyTo(&indicesBuffer);
+    //    TypedBuffer<ValType> xsTmp(TYPED_BUFFER_DEVICE);
+    //    TypedBuffer<uint32_t> indicesTmp(TYPED_BUFFER_DEVICE);
+    //    xsTmp.allocate(xs.size());
+    //    indicesTmp.allocate(xs.size());
 
-        DeviceStopwatch sw(0);
-        sw.start();
-        onesweep.sort({ xsBuffer.data(), indicesBuffer.data() }, { xsTmp.data(), indicesTmp.data() }, N, 0, sizeof(ValType) * 8, 0);
-        sw.stop();
-        printf("%f\n", sw.getElapsedMs());
+    //    DeviceStopwatch sw(0);
+    //    sw.start();
+    //    onesweep.sort({ xsBuffer.data(), indicesBuffer.data() }, { xsTmp.data(), indicesTmp.data() }, N, 0, sizeof(ValType) * 8, 0);
+    //    sw.stop();
+    //    printf("%f\n", sw.getElapsedMs());
 
-        TypedBuffer<ValType> sortedXs = xsBuffer.toHost();
-        TypedBuffer<uint32_t> sortedIndices = indicesBuffer.toHost();
-        for (int i = 0; i < N - 1; i++)
-        {
-            MINIMUM_LBVH_ASSERT(sortedXs[i] == xs[sortedIndices[i]]);
-            MINIMUM_LBVH_ASSERT(sortedXs[i] <= sortedXs[i + 1]);
-        }
-    }
+    //    TypedBuffer<ValType> sortedXs = xsBuffer.copyToHost();
+    //    TypedBuffer<uint32_t> sortedIndices = indicesBuffer.copyToHost();
+    //    for (int i = 0; i < N - 1; i++)
+    //    {
+    //        MINIMUM_LBVH_ASSERT(sortedXs[i] == xs[sortedIndices[i]]);
+    //        MINIMUM_LBVH_ASSERT(sortedXs[i] <= sortedXs[i + 1]);
+    //    }
+    //}
+
+    //std::vector<std::string> options;
+    //options.push_back("-I");
+    //options.push_back(GetDataPath("../"));
+    //Shader shader(GetDataPath("../minimum_lbvh.cu").c_str(), "minimum_lbvh", options);
+
+    minimum_lbvh::BVHGPUBuilder gpuBuilder(
+        GetDataPath("../minimum_lbvh.cu").c_str(),
+        GetDataPath("../").c_str()
+    );
 
     Camera3D camera;
     camera.origin = { 8.0f, 8.0f, 8.0f };
@@ -152,9 +161,11 @@ int main() {
     bool smooth = false;
 
     // BVH
-    std::vector<minimum_lbvh::Triangle> triangles;
+    TypedBuffer<minimum_lbvh::Triangle> triangles(TYPED_BUFFER_HOST);
+    TypedBuffer<minimum_lbvh::Triangle> trianglesDevice(TYPED_BUFFER_DEVICE);
+
     minimum_lbvh::BVHCPUBuilder builder;
-    std::vector<TriangleAttrib> triangleAttribs;
+    TypedBuffer<TriangleAttrib> triangleAttribs(TYPED_BUFFER_HOST);
 
     ITexture* texture = CreateTexture();
 
@@ -186,8 +197,8 @@ int main() {
             ColumnView<glm::vec3> positions(polymesh->positions());
             ColumnView<glm::vec3> normals(polymesh->normals());
 
-            triangles.clear();
-            triangleAttribs.clear();
+            triangles.allocate(faceCounts.count());
+            triangleAttribs.allocate(faceCounts.count());
 
             int indexBase = 0;
             for (int i = 0; i < faceCounts.count(); i++)
@@ -209,8 +220,8 @@ int main() {
                 float3 e1 = tri.vs[2] - tri.vs[1];
                 float3 e2 = tri.vs[0] - tri.vs[2];
 
-                triangles.push_back(tri);
-                triangleAttribs.push_back(attrib);
+                triangles[i] = tri;
+                triangleAttribs[i] = attrib;
                 indexBase += nVerts;
             }
 
@@ -234,6 +245,9 @@ int main() {
 
             if (builder.empty())
             {
+                triangles.copyTo(&trianglesDevice);
+                gpuBuilder.build(trianglesDevice.data(), trianglesDevice.size(), 0 /*stream*/);
+
 #if 1
                 Stopwatch sw;
                 builder.build(triangles.data(), triangles.size(), true /* isParallel */);

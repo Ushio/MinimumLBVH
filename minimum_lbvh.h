@@ -24,12 +24,19 @@
 #include <embree4/rtcore.h>
 #endif
 
+#if defined( ENABLE_GPU_BUILDER )
+#include "Orochi/Orochi.h"
+#endif
+
 #endif
 
 #define MORTON_MAX_VALUE_3D 0x1FFFFF
 
 namespace minimum_lbvh
 {
+	MINIMUM_LBVH_DEVICE uint64_t div_round_up64(uint64_t val, uint64_t divisor) noexcept { return (val + divisor - 1) / divisor; }
+	MINIMUM_LBVH_DEVICE uint64_t next_multiple64(uint64_t val, uint64_t divisor) noexcept { return div_round_up64(val, divisor) * divisor; }
+
 	template <class T>
 	MINIMUM_LBVH_DEVICE void swap(T* a, T* b)
 	{
@@ -612,6 +619,98 @@ namespace minimum_lbvh
 		std::vector<InternalNode> m_internals;
 		std::vector<uint8_t> m_deltas;
 	};
+	
+#if defined( ENABLE_GPU_BUILDER )
+	inline void loadAsVector(std::vector<char>* buffer, const char* fllePath)
+	{
+		FILE* fp = fopen(fllePath, "rb");
+		if (fp == nullptr) { return; }
+
+		fseek(fp, 0, SEEK_END);
+
+		buffer->resize(ftell(fp));
+
+		fseek(fp, 0, SEEK_SET);
+
+		size_t s = fread(buffer->data(), 1, buffer->size(), fp);
+		if (s != buffer->size())
+		{
+			buffer->clear();
+			return;
+		}
+		fclose(fp);
+		fp = nullptr;
+	}
+	class BVHGPUBuilder
+	{
+	public:
+		BVHGPUBuilder(const char* kernel, const char* includeDir )
+		{
+			// load shader source code
+			std::vector<char> src;
+			loadAsVector(&src, kernel);
+			MINIMUM_LBVH_ASSERT(0 < src.size());
+			src.push_back('\0');
+
+			orortcProgram program = 0;
+			orortcCreateProgram(&program, src.data(), "builder", 0, 0, 0);
+
+			std::vector<const char*> optionChars = {
+				"-I",
+				includeDir
+			};
+			orortcResult compileResult = orortcCompileProgram(program, optionChars.size(), optionChars.data());
+
+			// print compilation log
+			size_t logSize = 0;
+			orortcGetProgramLogSize(program, &logSize);
+			if (1 < logSize)
+			{
+				std::vector<char> compileLog(logSize);
+				orortcGetProgramLog(program, compileLog.data());
+				compileLog.push_back('\0');
+				printf("%s", compileLog.data());
+			}
+
+			// get compiled code
+			size_t codeSize = 0;
+			orortcGetCodeSize(program, &codeSize);
+
+			std::vector<char> codec(codeSize);
+			orortcGetCode(program, codec.data());
+
+			orortcDestroyProgram(&program);
+
+			oroModuleLoadData(&m_module, codec.data());
+
+			oroModuleGetFunction(&m_buildMortons, m_module, "buildMortons");
+		}
+		void build(const Triangle* triangles, int nTriangles, oroStream stream)
+		{
+			IndexedMorton* indexedMortons;
+			oroMalloc((void**)&indexedMortons, sizeof(IndexedMorton) * nTriangles);
+
+			{
+				const void* args[] = {
+					&indexedMortons,
+					&triangles,
+					&nTriangles
+				};
+				oroModuleLaunchKernel(m_buildMortons,
+					div_round_up64(nTriangles, 256), 1, 1,
+					256, 1, 1,
+					0 /*shared*/, stream, args, 0 /*extras*/);
+			}
+
+			oroError e = oroStreamSynchronize(stream);
+
+			oroFree(indexedMortons);
+		}
+
+		oroModule m_module = 0;
+		oroFunction m_buildMortons;
+	};
+#endif
 
 #endif
 
