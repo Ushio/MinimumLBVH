@@ -3,54 +3,36 @@
 
 using namespace minimum_lbvh;
 
-template <typename T>
-__device__ T ReduceMinBlock(T val, T* smem, int blockDim)
+template <class T, class F>
+__device__ T ReduceBlock(T val, T* smem, int blockDim, F f)
 {
 	smem[threadIdx.x] = val;
 	__syncthreads();
 	for (int i = 1; i < blockDim; i *= 2)
 	{
 		if (threadIdx.x < (threadIdx.x ^ i))
-			smem[threadIdx.x] = fminf(smem[threadIdx.x], smem[threadIdx.x ^ i]);
-		__syncthreads();
-	}
-	return smem[0];
-}
-template <typename T>
-__device__ T ReduceMaxBlock(T val, T* smem, int blockDim)
-{
-	smem[threadIdx.x] = val;
-	__syncthreads();
-	for (int i = 1; i < blockDim; i *= 2)
-	{
-		if (threadIdx.x < (threadIdx.x ^ i))
-			smem[threadIdx.x] = fmaxf(smem[threadIdx.x], smem[threadIdx.x ^ i]);
+			smem[threadIdx.x] = f(smem[threadIdx.x], smem[threadIdx.x ^ i]);
 		__syncthreads();
 	}
 	return smem[0];
 }
 
-__device__ float atomicMaxFloat(float* address, float val)
-{
-	int* address_as_i = (int*)address;
-	int old = *address_as_i, assumed;
-	do {
-		assumed = old;
-		old = atomicCAS(address_as_i, assumed,
-			__float_as_int(fmaxf(val, __int_as_float(assumed))));
-	} while (assumed != old);
-	return __int_as_float(old);
+
+// https://stackoverflow.com/questions/17399119/how-do-i-use-atomicmax-on-floating-point-values-in-cuda/72461459#72461459
+__device__ float atomicMinFloat(float* addr, float value) {
+	float old;
+	old = !signbit(value) ? __int_as_float(atomicMin((int*)addr, __float_as_int(value))) :
+		__uint_as_float(atomicMax((unsigned int*)addr, __float_as_uint(value)));
+
+	return old;
 }
-__device__ float atomicMinFloat(float* address, float val)
-{
-	int* address_as_i = (int*)address;
-	int old = *address_as_i, assumed;
-	do {
-		assumed = old;
-		old = atomicCAS(address_as_i, assumed,
-			__float_as_int(fminf(val, __int_as_float(assumed))));
-	} while (assumed != old);
-	return __int_as_float(old);
+
+__device__ float atomicMaxFloat(float* addr, float value) {
+	float old;
+	old = !signbit(value) ? __int_as_float(atomicMax((int*)addr, __float_as_int(value))) :
+		__uint_as_float(atomicMin((unsigned int*)addr, __float_as_uint(value)));
+
+	return old;
 }
 
 extern "C" __global__ void getSceneAABB(AABB* sceneAABB, const Triangle* triangles, int nTriangles)
@@ -69,8 +51,8 @@ extern "C" __global__ void getSceneAABB(AABB* sceneAABB, const Triangle* triangl
 		}
 	}
 
-	aabb.lower = ReduceMinBlock(aabb.lower, s_mem, blockDim.x);
-	aabb.upper = ReduceMaxBlock(aabb.upper, s_mem, blockDim.x);
+	aabb.lower = ReduceBlock(aabb.lower, s_mem, blockDim.x, [](float3 a, float3 b) { return fminf(a, b); });
+	aabb.upper = ReduceBlock(aabb.upper, s_mem, blockDim.x, [](float3 a, float3 b) { return fmaxf(a, b); });
 
 	if (threadIdx.x == 0)
 	{
