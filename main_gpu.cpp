@@ -61,8 +61,26 @@ private:
     oroEvent m_stop;
 };
 
+inline uint32_t __float_as_uint(float f) {
+    uint32_t r;
+    memcpy(&r, &f, sizeof(float));
+    return r;
+}
+inline int __float_as_int(float f) {
+    int r;
+    memcpy(&r, &f, sizeof(float));
+    return r;
+}
+
 int main() {
     using namespace pr;
+
+    //{
+    //    printf("%d\n", as_int32(-1.0f));
+    //}
+
+    //printf("%d\n", as_int32(-1.0f));
+    //printf("%d\n", as_int32(-1.0f));
 
     Config config;
     config.ScreenWidth = 1920;
@@ -77,7 +95,7 @@ int main() {
         return 0;
     }
 
-    int DEVICE_INDEX = 0;
+    int DEVICE_INDEX = 2;
     oroInit(0);
     oroDevice device;
     oroDeviceGet(&device, DEVICE_INDEX);
@@ -245,8 +263,20 @@ int main() {
 
             if (builder.empty())
             {
+                //minimum_lbvh::AABB sceneAABB = minimum_lbvh::AABB::empty();
+
+                //for (int i = 0; i < triangles.size(); i++)
+                //{
+                //    for (int j = 0; j < 3; ++j)
+                //    {
+                //        sceneAABB.extend(triangles[i].vs[j]);
+                //    }
+                //}
+                //printf("[cpu] lower %.5f %.5f %.5f\n", sceneAABB.lower.x, sceneAABB.lower.y, sceneAABB.lower.z);
+                //printf("[cpu] upper %.5f %.5f %.5f\n", sceneAABB.upper.x, sceneAABB.upper.y, sceneAABB.upper.z);
+
                 triangles.copyTo(&trianglesDevice);
-                gpuBuilder.build(trianglesDevice.data(), trianglesDevice.size(), 0 /*stream*/);
+                gpuBuilder.build(trianglesDevice.data(), trianglesDevice.size(), onesweep, 0 /*stream*/);
 
 #if 1
                 Stopwatch sw;
@@ -254,6 +284,10 @@ int main() {
                 printf("build %f\n", sw.elapsed());
 
                 builder.validate();
+
+                // test
+                oroMemcpyDtoH(builder.m_internals.data(), gpuBuilder.m_internals, sizeof(minimum_lbvh::InternalNode) * (triangles.size() - 1));
+                oroMemcpyDtoH(&builder.m_rootNode, gpuBuilder.m_rootNode, sizeof(minimum_lbvh::NodeIndex));
 #else
                 Stopwatch sw;
                 builder.buildByEmbree(triangles.data(), triangles.size(), RTC_BUILD_QUALITY_LOW);

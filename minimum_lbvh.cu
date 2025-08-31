@@ -65,16 +65,45 @@ extern "C" __global__ void getSceneAABB(AABB* sceneAABB, const Triangle* triangl
 	}
 }
 
-extern "C" __global__ void buildMortons(IndexedMorton* indexedMortons, const Triangle *triangles, int nTriangles)
+extern "C" __global__ void buildMortons(IndexedMorton* indexedMortons, const Triangle *triangles, int nTriangles, const AABB* sceneAABB)
 {
-	//int idx = blockIdx.x * blockDim.x + threadIdx.x;
-	//if (nTriangles <= idx)
-	//{
-	//	return;
-	//}
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
+	if (nTriangles <= idx)
+	{
+		return;
+	}
 
-	//Triangle tri = triangles[i];
-	//float3 center = (tri.vs[0] + tri.vs[1] + tri.vs[2]) / 3.0f;
-	//indexedMortons[i].morton = (uint32_t)(sceneAABB.encodeMortonCode(center) >> 31); // take higher 32bits out of 63bits
-	//indexedMortons[i].index = i;
+	Triangle tri = triangles[idx];
+	float3 center = (tri.vs[0] + tri.vs[1] + tri.vs[2]) / 3.0f;
+	indexedMortons[idx].morton = (uint32_t)(sceneAABB->encodeMortonCode(center) >> 31); // take higher 32bits out of 63bits
+	indexedMortons[idx].index = idx;
+}
+
+extern "C" __global__ void computeDeltas( uint8_t* deltas, const IndexedMorton* indexedMortons, int nTriangles )
+{
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
+	if (nTriangles - 1 <= idx)
+	{
+		return;
+	}
+	deltas[idx] = delta(indexedMortons[idx].morton, indexedMortons[idx + 1].morton);
+}
+
+extern "C" __global__ void build(NodeIndex* rootNode, InternalNode* internals, const Triangle* triangles, int nTriangles, uint8_t* deltas, const IndexedMorton* indexedMortons )
+{
+	int i_leaf = blockIdx.x * blockDim.x + threadIdx.x;
+	if (nTriangles <= i_leaf)
+	{
+		return;
+	}
+
+	build_lbvh(
+		rootNode,
+		internals,
+		triangles,
+		nTriangles,
+		deltas,
+		i_leaf,
+		indexedMortons[i_leaf].index
+	);
 }

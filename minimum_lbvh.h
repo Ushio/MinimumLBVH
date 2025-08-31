@@ -26,6 +26,7 @@
 
 #if defined( ENABLE_GPU_BUILDER )
 #include "Orochi/Orochi.h"
+#include "tinyhiponesweep.h"
 #endif
 
 #endif
@@ -648,6 +649,40 @@ namespace minimum_lbvh
 		fclose(fp);
 		fp = nullptr;
 	}
+
+	class DeviceStopwatch
+	{
+	public:
+		DeviceStopwatch(oroStream stream)
+		{
+			m_stream = stream;
+			oroEventCreateWithFlags(&m_start, oroEventDefault);
+			oroEventCreateWithFlags(&m_stop, oroEventDefault);
+		}
+		~DeviceStopwatch()
+		{
+			oroEventDestroy(m_start);
+			oroEventDestroy(m_stop);
+		}
+		DeviceStopwatch(const DeviceStopwatch&) = delete;
+		void operator=(const DeviceStopwatch&) = delete;
+
+		void start() { oroEventRecord(m_start, m_stream); }
+		void stop() { oroEventRecord(m_stop, m_stream); }
+
+		float getElapsedMs() const
+		{
+			oroEventSynchronize(m_stop);
+			float ms = 0;
+			oroEventElapsedTime(&ms, m_start, m_stop);
+			return ms;
+		}
+	private:
+		oroStream m_stream;
+		oroEvent m_start;
+		oroEvent m_stop;
+	};
+
 	class BVHGPUBuilder
 	{
 	public:
@@ -690,10 +725,13 @@ namespace minimum_lbvh
 
 			oroModuleLoadData(&m_module, codec.data());
 
-			oroModuleGetFunction(&m_buildMortons, m_module, "buildMortons");
 			oroModuleGetFunction(&m_getSceneAABB, m_module, "getSceneAABB");
-
+			oroModuleGetFunction(&m_buildMortons, m_module, "buildMortons");
+			oroModuleGetFunction(&m_computeDeltas, m_module, "computeDeltas");
+			oroModuleGetFunction(&m_build, m_module, "build");
+			
 			oroMalloc((void**)&m_sceneAABB, sizeof(AABB));
+			oroMalloc((void**)&m_rootNode, sizeof(NodeIndex));
 		}
 		~BVHGPUBuilder()
 		{
@@ -702,15 +740,29 @@ namespace minimum_lbvh
 		BVHGPUBuilder(const BVHGPUBuilder&) = delete;
 		void operator=(const BVHGPUBuilder&) = delete;
 
-		void build(const Triangle* triangles, int nTriangles, oroStream stream)
+		void build(const Triangle* triangles, int nTriangles, tinyhiponesweep::OnesweepSort& sorter, oroStream stream)
 		{
 			IndexedMorton* indexedMortons;
-			oroMallocAsync((void**)&indexedMortons, sizeof(IndexedMorton) * nTriangles, stream);
+			IndexedMorton* indexedMortonsTmp;
+			oroMallocAsync((void**)&indexedMortons,    sizeof(IndexedMorton) * nTriangles, stream);
+			oroMallocAsync((void**)&indexedMortonsTmp, sizeof(IndexedMorton) * nTriangles, stream);
+
+			uint8_t* deltas;
+			oroMallocAsync((void**)&deltas, nTriangles - 1, stream);
+
+			if (m_internals)
+			{
+				oroFree(m_internals);
+			}
+			oroMallocAsync((void**)&m_internals, sizeof(InternalNode) * (nTriangles - 1), stream);
 
 			static const AABB emptyAABB = AABB::empty();
 			oroMemcpyHtoDAsync(m_sceneAABB, (void*)&emptyAABB, sizeof(AABB), stream);
 
 			{
+				DeviceStopwatch sw(stream);
+				sw.start();
+
 				const void* args[] = {
 					&m_sceneAABB,
 					&triangles,
@@ -720,18 +772,22 @@ namespace minimum_lbvh
 					div_round_up64(nTriangles, 256), 1, 1,
 					256, 1, 1,
 					0 /*shared*/, stream, args, 0 /*extras*/);
+
+				sw.stop();
+				printf("%f ms\n", sw.getElapsedMs());
 			}
 
-			AABB sceneAABB;
-			oroMemcpyDtoH(&sceneAABB, m_sceneAABB, sizeof(AABB));
-			printf("[cuda] lower %.5f %.5f %.5f\n", sceneAABB.lower.x, sceneAABB.lower.y, sceneAABB.lower.z);
-			printf("[cuda] upper %.5f %.5f %.5f\n", sceneAABB.upper.x, sceneAABB.upper.y, sceneAABB.upper.z);
+			//AABB sceneAABB;
+			//oroMemcpyDtoH(&sceneAABB, m_sceneAABB, sizeof(AABB));
+			//printf("[cuda] lower %.5f %.5f %.5f\n", sceneAABB.lower.x, sceneAABB.lower.y, sceneAABB.lower.z);
+			//printf("[cuda] upper %.5f %.5f %.5f\n", sceneAABB.upper.x, sceneAABB.upper.y, sceneAABB.upper.z);
 
 			{
 				const void* args[] = {
 					&indexedMortons,
 					&triangles,
-					&nTriangles
+					&nTriangles,
+					&m_sceneAABB
 				};
 				oroModuleLaunchKernel(m_buildMortons,
 					div_round_up64(nTriangles, 256), 1, 1,
@@ -739,15 +795,59 @@ namespace minimum_lbvh
 					0 /*shared*/, stream, args, 0 /*extras*/);
 			}
 
-			oroError e = oroStreamSynchronize(stream);
+			sorter.sort({ (uint64_t *)indexedMortons, 0 }, { (uint64_t*)indexedMortonsTmp, 0 }, nTriangles, 0, sizeof(uint32_t) * 8, 0);
+
+			//std::vector<IndexedMorton> sorted(nTriangles);
+			//oroMemcpyDtoH(sorted.data(), indexedMortons, sizeof(IndexedMorton) * nTriangles);
+
+			//for (int i = 0; i < nTriangles - 1; i++)
+			//{
+			//	assert(sorted[i].morton <= sorted[i + 1].morton);
+			//}
+
+			{
+				const void* args[] = {
+					&deltas,
+					&indexedMortons,
+					&nTriangles
+				};
+				oroModuleLaunchKernel(m_computeDeltas,
+					div_round_up64(nTriangles - 1, 256), 1, 1,
+					256, 1, 1,
+					0 /*shared*/, stream, args, 0 /*extras*/);
+			}
+
+			oroMemsetD32Async(m_internals, 0xFFFFFFFF, sizeof(InternalNode) * (nTriangles - 1) / 4, stream);
+
+			{
+				const void* args[] = {
+					&m_rootNode,
+					&m_internals,
+					&triangles,
+					&nTriangles,
+					&deltas,
+					&indexedMortons
+				};
+				oroModuleLaunchKernel(m_build,
+					div_round_up64(nTriangles - 1, 256), 1, 1,
+					256, 1, 1,
+					0 /*shared*/, stream, args, 0 /*extras*/);
+			}
+			// oroError e = oroStreamSynchronize(stream);
 
 			oroFree(indexedMortons);
+			oroFree(indexedMortonsTmp);
+			oroFree(deltas);
 		}
 
 		oroModule m_module = 0;
-		oroFunction m_buildMortons = 0;
 		oroFunction m_getSceneAABB = 0;
-		AABB* m_sceneAABB;
+		oroFunction m_buildMortons = 0;
+		oroFunction m_computeDeltas = 0;
+		oroFunction m_build = 0;
+		AABB* m_sceneAABB = 0;
+		InternalNode* m_internals = 0;
+		NodeIndex* m_rootNode;
 	};
 #endif
 
