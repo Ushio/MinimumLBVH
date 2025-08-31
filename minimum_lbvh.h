@@ -192,6 +192,13 @@ namespace minimum_lbvh
 		float3 lower;
 		float3 upper;
 
+		MINIMUM_LBVH_DEVICE static AABB empty()
+		{
+			AABB aabb; 
+			aabb.setEmpty();
+			return aabb;
+		}
+
 		MINIMUM_LBVH_DEVICE void setEmpty()
 		{
 			lower = make_float3(+3.402823466e+38f);
@@ -684,11 +691,41 @@ namespace minimum_lbvh
 			oroModuleLoadData(&m_module, codec.data());
 
 			oroModuleGetFunction(&m_buildMortons, m_module, "buildMortons");
+			oroModuleGetFunction(&m_getSceneAABB, m_module, "getSceneAABB");
+
+			oroMalloc((void**)&m_sceneAABB, sizeof(AABB));
 		}
+		~BVHGPUBuilder()
+		{
+			oroFree(m_sceneAABB);
+		}
+		BVHGPUBuilder(const BVHGPUBuilder&) = delete;
+		void operator=(const BVHGPUBuilder&) = delete;
+
 		void build(const Triangle* triangles, int nTriangles, oroStream stream)
 		{
 			IndexedMorton* indexedMortons;
-			oroMalloc((void**)&indexedMortons, sizeof(IndexedMorton) * nTriangles);
+			oroMallocAsync((void**)&indexedMortons, sizeof(IndexedMorton) * nTriangles, stream);
+
+			static const AABB emptyAABB = AABB::empty();
+			oroMemcpyHtoDAsync(m_sceneAABB, (void*)&emptyAABB, sizeof(AABB), stream);
+
+			{
+				const void* args[] = {
+					&m_sceneAABB,
+					&triangles,
+					&nTriangles
+				};
+				oroModuleLaunchKernel(m_getSceneAABB,
+					div_round_up64(nTriangles, 256), 1, 1,
+					256, 1, 1,
+					0 /*shared*/, stream, args, 0 /*extras*/);
+			}
+
+			AABB sceneAABB;
+			oroMemcpyDtoH(&sceneAABB, m_sceneAABB, sizeof(AABB));
+			printf("[cuda] lower %.5f %.5f %.5f\n", sceneAABB.lower.x, sceneAABB.lower.y, sceneAABB.lower.z);
+			printf("[cuda] upper %.5f %.5f %.5f\n", sceneAABB.upper.x, sceneAABB.upper.y, sceneAABB.upper.z);
 
 			{
 				const void* args[] = {
@@ -708,7 +745,9 @@ namespace minimum_lbvh
 		}
 
 		oroModule m_module = 0;
-		oroFunction m_buildMortons;
+		oroFunction m_buildMortons = 0;
+		oroFunction m_getSceneAABB = 0;
+		AABB* m_sceneAABB;
 	};
 #endif
 
