@@ -304,6 +304,9 @@ int main() {
 
         pixels.allocate(imageWidth * imageHeight);
         {
+            DeviceStopwatch sw(0);
+            sw.start();
+
             RayGenerator rayGenerator;
             rayGenerator.lookat(to(camera.origin), to(camera.lookat), to(camera.up), camera.fovy, imageWidth, imageHeight);
 
@@ -319,6 +322,9 @@ int main() {
                 16, 16, 1,
                 0
             );
+
+            sw.stop();
+            printf("render %f ms\n", sw.getElapsedMs());
         }
 
         static Image2DRGBA32 image;
