@@ -8,7 +8,7 @@ extern "C" __global__ void render(float4 *pixels, int2 imageSize, RayGenerator r
     int xi = threadIdx.x + blockDim.x * blockIdx.x;
     int yi = threadIdx.y + blockDim.y * blockIdx.y;
 
-    if (imageSize.x <= xi || imageSize.y < yi)
+    if (imageSize.x <= xi || imageSize.y <= yi)
     {
         return;
     }
