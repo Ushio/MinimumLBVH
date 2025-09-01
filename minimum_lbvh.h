@@ -31,6 +31,7 @@
 
 #endif
 
+#define MINIMUM_LBVH_FLT_MAX 3.402823466e+38F
 #define MORTON_MAX_VALUE_3D 0x1FFFFF
 
 namespace minimum_lbvh
@@ -742,6 +743,11 @@ namespace minimum_lbvh
 
 		void build(const Triangle* triangles, int nTriangles, tinyhiponesweep::OnesweepSort& sorter, oroStream stream)
 		{
+			DeviceStopwatch sw(stream);
+			sw.start();
+
+			m_nTriangles = nTriangles;
+
 			IndexedMorton* indexedMortons;
 			IndexedMorton* indexedMortonsTmp;
 			oroMallocAsync((void**)&indexedMortons,    sizeof(IndexedMorton) * nTriangles, stream);
@@ -760,9 +766,6 @@ namespace minimum_lbvh
 			oroMemcpyHtoDAsync(m_sceneAABB, (void*)&emptyAABB, sizeof(AABB), stream);
 
 			{
-				DeviceStopwatch sw(stream);
-				sw.start();
-
 				const void* args[] = {
 					&m_sceneAABB,
 					&triangles,
@@ -772,9 +775,6 @@ namespace minimum_lbvh
 					div_round_up64(nTriangles, 256), 1, 1,
 					256, 1, 1,
 					0 /*shared*/, stream, args, 0 /*extras*/);
-
-				sw.stop();
-				printf("%f ms\n", sw.getElapsedMs());
 			}
 
 			//AABB sceneAABB;
@@ -819,6 +819,7 @@ namespace minimum_lbvh
 
 			oroMemsetD32Async(m_internals, 0xFFFFFFFF, sizeof(InternalNode) * (nTriangles - 1) / 4, stream);
 
+
 			{
 				const void* args[] = {
 					&m_rootNode,
@@ -838,8 +839,14 @@ namespace minimum_lbvh
 			oroFree(indexedMortons);
 			oroFree(indexedMortonsTmp);
 			oroFree(deltas);
-		}
 
+			sw.stop();
+			printf("%f ms\n", sw.getElapsedMs());
+		}
+		bool empty() const
+		{
+			return m_nTriangles == 0;
+		}
 		oroModule m_module = 0;
 		oroFunction m_getSceneAABB = 0;
 		oroFunction m_buildMortons = 0;
@@ -848,6 +855,7 @@ namespace minimum_lbvh
 		AABB* m_sceneAABB = 0;
 		InternalNode* m_internals = 0;
 		NodeIndex* m_rootNode;
+		int m_nTriangles = 0;
 	};
 #endif
 

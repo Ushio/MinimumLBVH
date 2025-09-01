@@ -10,6 +10,7 @@
 
 #define ENABLE_GPU_BUILDER
 #include "minimum_lbvh.h"
+#include "camera.h"
 
 #include "typedbuffer.h"
 #include "shader.h"
@@ -95,7 +96,7 @@ int main() {
         return 0;
     }
 
-    int DEVICE_INDEX = 2;
+    int DEVICE_INDEX = 0;
     oroInit(0);
     oroDevice device;
     oroDeviceGet(&device, DEVICE_INDEX);
@@ -153,15 +154,17 @@ int main() {
     //    }
     //}
 
-    //std::vector<std::string> options;
-    //options.push_back("-I");
-    //options.push_back(GetDataPath("../"));
-    //Shader shader(GetDataPath("../minimum_lbvh.cu").c_str(), "minimum_lbvh", options);
-
     minimum_lbvh::BVHGPUBuilder gpuBuilder(
         GetDataPath("../minimum_lbvh.cu").c_str(),
         GetDataPath("../").c_str()
     );
+
+    std::vector<std::string> options;
+    options.push_back("-I");
+    options.push_back(GetDataPath("../"));
+    Shader shader(GetDataPath("../main_gpu.cu").c_str(), "main_gpu", options);
+
+    TypedBuffer<float4> pixels(TYPED_BUFFER_DEVICE);
 
     Camera3D camera;
     camera.origin = { 8.0f, 8.0f, 8.0f };
@@ -261,7 +264,7 @@ int main() {
                 pr::PrimEnd();
             }
 
-            if (builder.empty())
+            if (gpuBuilder.empty())
             {
                 //minimum_lbvh::AABB sceneAABB = minimum_lbvh::AABB::empty();
 
@@ -278,62 +281,86 @@ int main() {
                 triangles.copyTo(&trianglesDevice);
                 gpuBuilder.build(trianglesDevice.data(), trianglesDevice.size(), onesweep, 0 /*stream*/);
 
-#if 1
-                Stopwatch sw;
-                builder.build(triangles.data(), triangles.size(), true /* isParallel */);
-                printf("build %f\n", sw.elapsed());
-
-                builder.validate();
-
-                // test
-                oroMemcpyDtoH(builder.m_internals.data(), gpuBuilder.m_internals, sizeof(minimum_lbvh::InternalNode) * (triangles.size() - 1));
-                oroMemcpyDtoH(&builder.m_rootNode, gpuBuilder.m_rootNode, sizeof(minimum_lbvh::NodeIndex));
-#else
-                Stopwatch sw;
-                builder.buildByEmbree(triangles.data(), triangles.size(), RTC_BUILD_QUALITY_LOW);
-                printf("embree build %f\n", sw.elapsed());
-#endif
+//#if 1
+//                Stopwatch sw;
+//                builder.build(triangles.data(), triangles.size(), true /* isParallel */);
+//                printf("build %f\n", sw.elapsed());
+//
+//                builder.validate();
+//
+//                // test
+//                //oroMemcpyDtoH(builder.m_internals.data(), gpuBuilder.m_internals, sizeof(minimum_lbvh::InternalNode) * (triangles.size() - 1));
+//                //oroMemcpyDtoH(&builder.m_rootNode, gpuBuilder.m_rootNode, sizeof(minimum_lbvh::NodeIndex));
+//#else
+//                Stopwatch sw;
+//                builder.buildByEmbree(triangles.data(), triangles.size(), RTC_BUILD_QUALITY_LOW);
+//                printf("embree build %f\n", sw.elapsed());
+//#endif
             }
         });
 
-        //traverse(internals.data(), rootNode, 0);
+        int imageWidth = GetScreenWidth();
+        int imageHeight = GetScreenHeight();
 
-        int stride = 2;
-        Image2DRGBA8 image;
-        image.allocate(GetScreenWidth() / stride, GetScreenHeight() / stride);
+        pixels.allocate(imageWidth * imageHeight);
+        {
+            RayGenerator rayGenerator;
+            rayGenerator.lookat(to(camera.origin), to(camera.lookat), to(camera.up), camera.fovy, imageWidth, imageHeight);
 
-        CameraRayGenerator rayGenerator(GetCurrentViewMatrix(), GetCurrentProjMatrix(), image.width(), image.height());
-
-        //for (int j = 0; j < image.height(); ++j)
-        ParallelFor(image.height(), [&](int j) {
-            for (int i = 0; i < image.width(); ++i)
-            {
-                glm::vec3 ro, rd;
-                rayGenerator.shoot(&ro, &rd, i, j, 0.5f, 0.5f);
-
-                minimum_lbvh::Hit hit;
-                minimum_lbvh::intersect(&hit, builder.m_internals.data(), triangles.data(), builder.m_rootNode, to(ro), to(rd), minimum_lbvh::invRd(to(rd)));
-                if (hit.t != FLT_MAX)
-                {
-                    float3 n = normalize(hit.ng);
-                    if (smooth)
-                    {
-                        TriangleAttrib attrib = triangleAttribs[hit.triangleIndex];
-                        n = attrib.shadingNormals[0] +
-                            (attrib.shadingNormals[1] - attrib.shadingNormals[0]) * hit.uv.x +
-                            (attrib.shadingNormals[2] - attrib.shadingNormals[0]) * hit.uv.y;
-                        n = normalize(n);
-                    }
-                    float3 color = (n + make_float3(1.0f)) * 0.5f;
-                    image(i, j) = { 255 * color.x, 255 * color.y, 255 * color.z, 255 };
-                }
-                else
-                {
-                    image(i, j) = { 0, 0, 0, 255 };
-                }
-            }
+            shader.launch("render",
+                ShaderArgument()
+                .value(pixels.data())
+                .value(int2{ imageWidth, imageHeight })
+                .value(rayGenerator)
+                .value(gpuBuilder.m_rootNode)
+                .value(gpuBuilder.m_internals)
+                .value(trianglesDevice.data()),
+                div_round_up64(imageWidth, 16), div_round_up64(imageHeight, 16), 1,
+                16, 16, 1,
+                0
+            );
         }
-        );
+
+        static Image2DRGBA32 image;
+        image.allocate(imageWidth, imageHeight);
+        oroMemcpyDtoH(image.data(), pixels.data(), pixels.bytes());
+
+        //int stride = 2;
+        //Image2DRGBA8 image;
+        //image.allocate(GetScreenWidth() / stride, GetScreenHeight() / stride);
+
+        //CameraRayGenerator rayGenerator(GetCurrentViewMatrix(), GetCurrentProjMatrix(), image.width(), image.height());
+
+        ////for (int j = 0; j < image.height(); ++j)
+        //ParallelFor(image.height(), [&](int j) {
+        //    for (int i = 0; i < image.width(); ++i)
+        //    {
+        //        glm::vec3 ro, rd;
+        //        rayGenerator.shoot(&ro, &rd, i, j, 0.5f, 0.5f);
+
+        //        minimum_lbvh::Hit hit;
+        //        minimum_lbvh::intersect(&hit, builder.m_internals.data(), triangles.data(), builder.m_rootNode, to(ro), to(rd), minimum_lbvh::invRd(to(rd)));
+        //        if (hit.t != FLT_MAX)
+        //        {
+        //            float3 n = normalize(hit.ng);
+        //            if (smooth)
+        //            {
+        //                TriangleAttrib attrib = triangleAttribs[hit.triangleIndex];
+        //                n = attrib.shadingNormals[0] +
+        //                    (attrib.shadingNormals[1] - attrib.shadingNormals[0]) * hit.uv.x +
+        //                    (attrib.shadingNormals[2] - attrib.shadingNormals[0]) * hit.uv.y;
+        //                n = normalize(n);
+        //            }
+        //            float3 color = (n + make_float3(1.0f)) * 0.5f;
+        //            image(i, j) = { 255 * color.x, 255 * color.y, 255 * color.z, 255 };
+        //        }
+        //        else
+        //        {
+        //            image(i, j) = { 0, 0, 0, 255 };
+        //        }
+        //    }
+        //}
+        //);
 
         texture->upload(image);
 
