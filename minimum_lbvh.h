@@ -203,8 +203,8 @@ namespace minimum_lbvh
 
 		MINIMUM_LBVH_DEVICE void setEmpty()
 		{
-			lower = make_float3(+3.402823466e+38f);
-			upper = make_float3(-3.402823466e+38f);
+			lower = make_float3(+MINIMUM_LBVH_FLT_MAX);
+			upper = make_float3(-MINIMUM_LBVH_FLT_MAX);
 		}
 		MINIMUM_LBVH_DEVICE void extend(const float3& p)
 		{
@@ -863,7 +863,7 @@ namespace minimum_lbvh
 
 	struct Hit
 	{
-		float t = 3.402823466e+38F;
+		float t = MINIMUM_LBVH_FLT_MAX;
 		float2 uv = {};
 		float3 ng = {};
 		uint32_t triangleIndex = 0xFFFFFFFF;
@@ -871,7 +871,7 @@ namespace minimum_lbvh
 
 	MINIMUM_LBVH_DEVICE inline float3 invRd(float3 rd)
 	{
-		return clamp(1.0f / rd, -3.402823466e+38F, 3.402823466e+38F);
+		return clamp(1.0f / rd, -MINIMUM_LBVH_FLT_MAX, MINIMUM_LBVH_FLT_MAX);
 	}
 
 	// stackful traversal for reference
