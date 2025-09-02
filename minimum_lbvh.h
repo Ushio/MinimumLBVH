@@ -70,7 +70,7 @@ namespace minimum_lbvh
 		return fmaxf(fmaxf(v.x, v.y), v.z);
 	}
 
-	MINIMUM_LBVH_DEVICE inline float2 slabs(float3 ro, float3 one_over_rd, float3 lower, float3 upper )
+	MINIMUM_LBVH_DEVICE inline float2 slabs(float3 ro, float3 one_over_rd, float3 lower, float3 upper, float knownHitT)
 	{
 		float3 t0 = (lower - ro) * one_over_rd;
 		float3 t1 = (upper - ro) * one_over_rd;
@@ -81,6 +81,7 @@ namespace minimum_lbvh
 		float region_max = compMin(tmax) * 1.00000024f; // Robust BVH Ray Traversal- revised
 
 		region_min = fmaxf(region_min, 0.0f);
+		region_max = fminf(region_max, knownHitT);
 
 		return { region_min, region_max };
 	}
@@ -911,8 +912,8 @@ namespace minimum_lbvh
 			const AABB& L = nodes[node.m_index].aabbs[0];
 			const AABB& R = nodes[node.m_index].aabbs[1];
 
-			float2 rangeL = slabs(ro, one_over_rd, L.lower, L.upper);
-			float2 rangeR = slabs(ro, one_over_rd, R.lower, R.upper);
+			float2 rangeL = slabs(ro, one_over_rd, L.lower, L.upper, hit->t);
+			float2 rangeR = slabs(ro, one_over_rd, R.lower, R.upper, hit->t);
 			bool hitL = rangeL.x <= rangeL.y;
 			bool hitR = rangeR.x <= rangeR.y;
 
@@ -967,8 +968,8 @@ namespace minimum_lbvh
 
 			AABB L = nodes[curr_node.m_index].aabbs[0];
 			AABB R = nodes[curr_node.m_index].aabbs[1];
-			float2 rangeL = slabs(ro, one_over_rd, L.lower, L.upper);
-			float2 rangeR = slabs(ro, one_over_rd, R.lower, R.upper);
+			float2 rangeL = slabs(ro, one_over_rd, L.lower, L.upper, hit->t); // far object may be culled during backtracking, but then nHits is 1 or 0 thus just go parent as expected.
+			float2 rangeR = slabs(ro, one_over_rd, R.lower, R.upper, hit->t);
 			bool hitL = rangeL.x <= rangeL.y;
 			bool hitR = rangeR.x <= rangeR.y;
 
