@@ -44,7 +44,7 @@
 #define MINIMUM_LBVH_WARP_SIZE 32
 #define MINIMUM_LBVH_MAX_STACK_COUNT 63
 #define MINIMUM_LBVH_MAX_OCCUPANCY 16
-#define MINIMUM_LBVH_MAX_COMPUTE_UNIT 256
+#define MINIMUM_LBVH_MAX_COMPUTE_UNIT 512
 #define MINIMUM_LBVH_STACK_BUFFER_COUNT ((MINIMUM_LBVH_MAX_STACK_COUNT + 1) * MINIMUM_LBVH_WARP_SIZE * MINIMUM_LBVH_MAX_OCCUPANCY * MINIMUM_LBVH_MAX_COMPUTE_UNIT)
 
 namespace minimum_lbvh
@@ -913,7 +913,7 @@ namespace minimum_lbvh
 #if defined(MINIMUM_LBVH_KERNELCC)
 	MINIMUM_LBVH_DEVICE inline int laneIdx()
 	{
-		return ( threadIdx.x + threadIdx.y * blockDim.y ) % MINIMUM_LBVH_WARP_SIZE;
+		return (threadIdx.x + threadIdx.y * blockDim.x + threadIdx.z * blockDim.x * blockDim.y) % MINIMUM_LBVH_WARP_SIZE;
 	}
 
 	MINIMUM_LBVH_DEVICE inline NodeIndex* allocStack(NodeIndex* stackBuffer)
