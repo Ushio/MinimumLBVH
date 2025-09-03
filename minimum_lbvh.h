@@ -34,6 +34,12 @@
 #define MINIMUM_LBVH_FLT_MAX 3.402823466e+38F
 #define MORTON_MAX_VALUE_3D 0x1FFFFF
 
+#define MINIMUM_LBVH_WARP_SIZE 32
+#define MINIMUM_LBVH_MAX_STACK_COUNT 63
+#define MINIMUM_LBVH_MAX_OCCUPANCY 16
+#define MINIMUM_LBVH_MAX_COMPUTE_UNIT 256
+#define MINIMUM_LBVH_STACK_BUFFER_COUNT ((MINIMUM_LBVH_MAX_STACK_COUNT + 1) * MINIMUM_LBVH_WARP_SIZE * MINIMUM_LBVH_MAX_OCCUPANCY * MINIMUM_LBVH_MAX_COMPUTE_UNIT)
+
 namespace minimum_lbvh
 {
 	MINIMUM_LBVH_DEVICE uint64_t div_round_up64(uint64_t val, uint64_t divisor) noexcept { return (val + divisor - 1) / divisor; }
@@ -685,6 +691,28 @@ namespace minimum_lbvh
 		oroEvent m_stop;
 	};
 
+	class BVHGPUStackBuffer
+	{
+	public:
+		BVHGPUStackBuffer()
+		{
+			oroMalloc((void**)&m_buffer, sizeof(uint32_t) * MINIMUM_LBVH_STACK_BUFFER_COUNT);
+			oroMemsetD32(m_buffer, 0, MINIMUM_LBVH_STACK_BUFFER_COUNT);
+		}
+		~BVHGPUStackBuffer()
+		{
+			oroFree(m_buffer);
+		}
+		BVHGPUStackBuffer(const BVHGPUStackBuffer&) = delete;
+		void operator=(const BVHGPUStackBuffer&) = delete;
+
+		uint32_t* getBuffer()
+		{
+			return m_buffer;
+		}
+		uint32_t* m_buffer;
+	};
+
 	class BVHGPUBuilder
 	{
 	public:
@@ -875,6 +903,62 @@ namespace minimum_lbvh
 		return clamp(1.0f / rd, -MINIMUM_LBVH_FLT_MAX, MINIMUM_LBVH_FLT_MAX);
 	}
 
+	// https://jcgt.org/published/0009/03/02/
+	MINIMUM_LBVH_DEVICE inline uint32_t hashPCG(uint32_t v)
+	{
+		uint32_t state = v * 747796405 + 2891336453;
+		uint32_t word = ((state >> ((state >> 28) + 4)) ^ state) * 277803737;
+		return (word >> 22) ^ word;
+	}
+
+	MINIMUM_LBVH_DEVICE inline uint32_t hashPCG3(uint32_t x, uint32_t y, uint32_t z)
+	{
+		return hashPCG(hashPCG(hashPCG(x) + y) + z);
+	}
+
+#if defined(MINIMUM_LBVH_KERNELCC)
+	MINIMUM_LBVH_DEVICE inline int laneIdx()
+	{
+		return ( threadIdx.x + threadIdx.y * blockDim.y ) % MINIMUM_LBVH_WARP_SIZE;
+	}
+
+	MINIMUM_LBVH_DEVICE inline NodeIndex* allocStack(NodeIndex* stackBuffer)
+	{
+		const int CHUNK_SIZE = (MINIMUM_LBVH_MAX_STACK_COUNT + 1) * MINIMUM_LBVH_WARP_SIZE;
+		const int CHUNK_COUNT = MINIMUM_LBVH_STACK_BUFFER_COUNT / CHUNK_SIZE;
+
+		uint32_t chunkIndex;
+		int lane = laneIdx();
+		if (lane == 0)
+		{
+			int x = threadIdx.x + blockDim.x * blockIdx.x;
+			int y = threadIdx.y + blockDim.y * blockIdx.y;
+			int z = threadIdx.z + blockDim.z * blockIdx.z;
+			chunkIndex = hashPCG3(x, y, z) % CHUNK_COUNT;
+
+			while (atomicExch((uint32_t*)(stackBuffer + chunkIndex * CHUNK_SIZE), 1) != 0)
+			{
+				chunkIndex = (chunkIndex + 1) % CHUNK_COUNT;
+			}
+		}
+
+		__threadfence();
+
+		chunkIndex = __shfl(chunkIndex, 0);
+
+		return stackBuffer + chunkIndex * CHUNK_SIZE + (MINIMUM_LBVH_MAX_STACK_COUNT + 1) * lane + 1;
+	}
+	MINIMUM_LBVH_DEVICE inline void freeStack(NodeIndex* stack)
+	{
+		__threadfence();
+
+		if (laneIdx() == 0)
+		{
+			atomicExch((uint32_t*)stack - 1, 0);
+		}
+	}
+#endif
+
 	// stackful traversal for reference
 	MINIMUM_LBVH_DEVICE inline void intersect_stackfull(
 		Hit* hit,
@@ -883,16 +967,14 @@ namespace minimum_lbvh
 		NodeIndex rootNode,
 		float3 ro,
 		float3 rd,
-		float3 one_over_rd)
+		float3 one_over_rd, 
+		NodeIndex* stack)
 	{
-		int sp = 1;
-		NodeIndex stack[64];
-		stack[0] = rootNode;
+		int sp = 0;
 
-		while (sp)
+		NodeIndex node = rootNode;
+		while (node != NodeIndex::invalid())
 		{
-			NodeIndex node = stack[--sp];
-
 			if (node.m_isLeaf)
 			{
 				float t;
@@ -906,6 +988,8 @@ namespace minimum_lbvh
 					hit->ng = ng;
 					hit->triangleIndex = node.m_index;
 				}
+
+				node = sp == 0 ? NodeIndex::invalid() : stack[--sp];
 				continue;
 			}
 
@@ -925,11 +1009,15 @@ namespace minimum_lbvh
 					mask = 0x1;
 				}
 				stack[sp++] = nodes[node.m_index].children[1 ^ mask];
-				stack[sp++] = nodes[node.m_index].children[0 ^ mask];
+				node = nodes[node.m_index].children[0 ^ mask];
 			}
 			else if (hitL || hitR)
 			{
-				stack[sp++] = nodes[node.m_index].children[hitL ? 0 : 1];
+				node = nodes[node.m_index].children[hitL ? 0 : 1];
+			}
+			else
+			{
+				node = sp == 0 ? NodeIndex::invalid() : stack[--sp];
 			}
 		}
 	}

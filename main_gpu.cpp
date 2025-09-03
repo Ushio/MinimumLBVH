@@ -188,13 +188,15 @@ int main() {
     minimum_lbvh::BVHCPUBuilder builder;
     TypedBuffer<TriangleAttrib> triangleAttribs(TYPED_BUFFER_HOST);
 
+    minimum_lbvh::BVHGPUStackBuffer stackBuffer;
+
     ITexture* texture = CreateTexture();
 
     while (pr::NextFrame() == false) {
         if (IsImGuiUsingMouse() == false) {
             UpdateCameraBlenderLike(&camera);
         }
-
+        
         //ClearBackground(0.1f, 0.1f, 0.1f, 1);
         ClearBackground(texture);
 
@@ -317,8 +319,10 @@ int main() {
                 .value(rayGenerator)
                 .value(gpuBuilder.m_rootNode)
                 .value(gpuBuilder.m_internals)
-                .value(trianglesDevice.data()),
+                .value(trianglesDevice.data())
+                .value(stackBuffer.getBuffer()),
                 div_round_up64(imageWidth, 16), div_round_up64(imageHeight, 16), 1,
+                //1,1,1,
                 16, 16, 1,
                 0
             );
