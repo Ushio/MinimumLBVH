@@ -4,6 +4,13 @@
 
 #if ( defined( __CUDACC__ ) || defined( __HIPCC__ ) )
 #define MINIMUM_LBVH_KERNELCC
+
+#if defined(__CUDACC__)
+#define MINIMUM_LBVH_SHFL(val, src_line) __shfl_sync(0xffffffff, val, src_line)
+#else
+#define MINIMUM_LBVH_SHFL(val, src_line) __shfl(val, src_line)
+#endif
+
 #endif
 
 #if defined(MINIMUM_LBVH_KERNELCC)
@@ -931,7 +938,7 @@ namespace minimum_lbvh
 
 		__threadfence();
 
-		chunkIndex = __shfl(chunkIndex, 0);
+		chunkIndex = MINIMUM_LBVH_SHFL(chunkIndex, 0);
 
 		return stackBuffer + chunkIndex * CHUNK_SIZE + (MINIMUM_LBVH_MAX_STACK_COUNT + 1) * lane + 1;
 	}
