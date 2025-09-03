@@ -18,8 +18,8 @@ extern "C" __global__ void render(float4 *pixels, int2 imageSize, RayGenerator r
         rayGenerator.shoot(&ro, &rd, (float)xi / imageSize.x, (float)yi / imageSize.y);
 
         Hit hit;
-        intersect(&hit, internals, triangles, *rootNode, ro, rd, invRd(rd));
-        // intersect_stackfull(&hit, internals, triangles, *rootNode, ro, rd, invRd(rd), stack);
+        // intersect(&hit, internals, triangles, *rootNode, ro, rd, invRd(rd));
+        intersect_stackfull(&hit, internals, triangles, *rootNode, ro, rd, invRd(rd), stack);
         if (hit.t != MINIMUM_LBVH_FLT_MAX)
         {
             float3 n = normalize(hit.ng);

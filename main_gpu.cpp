@@ -76,13 +76,6 @@ inline int __float_as_int(float f) {
 int main() {
     using namespace pr;
 
-    //{
-    //    printf("%d\n", as_int32(-1.0f));
-    //}
-
-    //printf("%d\n", as_int32(-1.0f));
-    //printf("%d\n", as_int32(-1.0f));
-
     Config config;
     config.ScreenWidth = 1920;
     config.ScreenHeight = 1080;
@@ -96,7 +89,7 @@ int main() {
         return 0;
     }
 
-    int DEVICE_INDEX = 0;
+    int DEVICE_INDEX = 2;
     oroInit(0);
     oroDevice device;
     oroDeviceGet(&device, DEVICE_INDEX);

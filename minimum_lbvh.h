@@ -806,11 +806,6 @@ namespace minimum_lbvh
 					0 /*shared*/, stream, args, 0 /*extras*/);
 			}
 
-			//AABB sceneAABB;
-			//oroMemcpyDtoH(&sceneAABB, m_sceneAABB, sizeof(AABB));
-			//printf("[cuda] lower %.5f %.5f %.5f\n", sceneAABB.lower.x, sceneAABB.lower.y, sceneAABB.lower.z);
-			//printf("[cuda] upper %.5f %.5f %.5f\n", sceneAABB.upper.x, sceneAABB.upper.y, sceneAABB.upper.z);
-
 			{
 				const void* args[] = {
 					&indexedMortons,
@@ -825,14 +820,6 @@ namespace minimum_lbvh
 			}
 
 			sorter.sort({ (uint64_t *)indexedMortons, 0 }, { (uint64_t*)indexedMortonsTmp, 0 }, nTriangles, 0, sizeof(uint32_t) * 8, 0);
-
-			//std::vector<IndexedMorton> sorted(nTriangles);
-			//oroMemcpyDtoH(sorted.data(), indexedMortons, sizeof(IndexedMorton) * nTriangles);
-
-			//for (int i = 0; i < nTriangles - 1; i++)
-			//{
-			//	assert(sorted[i].morton <= sorted[i + 1].morton);
-			//}
 
 			{
 				const void* args[] = {
@@ -1003,13 +990,14 @@ namespace minimum_lbvh
 
 			if (hitL && hitR)
 			{
-				int mask = 0x0;
+				NodeIndex near_node = nodes[node.m_index].children[0];
+				NodeIndex far_node  = nodes[node.m_index].children[1];
 				if (rangeR.x < rangeL.x)
 				{
-					mask = 0x1;
+					swap(&near_node, &far_node);
 				}
-				stack[sp++] = nodes[node.m_index].children[1 ^ mask];
-				node = nodes[node.m_index].children[0 ^ mask];
+				node = near_node;
+				stack[sp++] = far_node;
 			}
 			else if (hitL || hitR)
 			{
