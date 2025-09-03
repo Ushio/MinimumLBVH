@@ -257,9 +257,9 @@ namespace minimum_lbvh
 
 	struct InternalNode
 	{
-		NodeIndex parent;
 		NodeIndex children[2];
 		AABB aabbs[2];
+		NodeIndex parent;
 		uint32_t oneOfEdges; // wasteful but for simplicity
 	};
 
