@@ -3,7 +3,14 @@
 #include "camera.h"
 using namespace minimum_lbvh;
 
-extern "C" __global__ void render(float4 *pixels, int2 imageSize, RayGenerator rayGenerator, const NodeIndex* rootNode, const InternalNode* internals, const Triangle* triangles, NodeIndex* stackBuffer )
+__device__ uint32_t packRGBA( float4 color )
+{
+    int4 i4 = make_int4(color * 255.0f + make_float4(0.5f));
+    i4 = clamp(i4, 0, 255);
+    return (i4.z << 16) | (i4.y << 8) | i4.x;
+}
+
+extern "C" __global__ void render(uint32_t *pixels, int2 imageSize, RayGenerator rayGenerator, const NodeIndex* rootNode, const InternalNode* internals, const Triangle* triangles, NodeIndex* stackBuffer )
 {
     int xi = threadIdx.x + blockDim.x * blockIdx.x;
     int yi = threadIdx.y + blockDim.y * blockIdx.y;
@@ -18,25 +25,17 @@ extern "C" __global__ void render(float4 *pixels, int2 imageSize, RayGenerator r
         rayGenerator.shoot(&ro, &rd, (float)xi / imageSize.x, (float)yi / imageSize.y);
 
         Hit hit;
-        // intersect(&hit, internals, triangles, *rootNode, ro, rd, invRd(rd));
-        intersect_stackfull(&hit, internals, triangles, *rootNode, ro, rd, invRd(rd), stack);
+        intersect(&hit, internals, triangles, *rootNode, ro, rd, invRd(rd));
+        // intersect_stackfull(&hit, internals, triangles, *rootNode, ro, rd, invRd(rd), stack);
         if (hit.t != MINIMUM_LBVH_FLT_MAX)
         {
             float3 n = normalize(hit.ng);
-            //if (smooth)
-            //{
-            //    TriangleAttrib attrib = triangleAttribs[hit.triangleIndex];
-            //    n = attrib.shadingNormals[0] +
-            //        (attrib.shadingNormals[1] - attrib.shadingNormals[0]) * hit.uv.x +
-            //        (attrib.shadingNormals[2] - attrib.shadingNormals[0]) * hit.uv.y;
-            //    n = normalize(n);
-            //}
             float3 color = (n + make_float3(1.0f)) * 0.5f;
-            pixels[pixel] = { color.x, color.y, color.z, 1.0f };
+            pixels[pixel] = packRGBA({ color.x, color.y, color.z, 1.0f });
         }
         else
         {
-            pixels[pixel] = { 0, 0, 0, 1 };
+            pixels[pixel] = packRGBA({ 0, 0, 0, 1 });
         }
     }
 

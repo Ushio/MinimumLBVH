@@ -62,17 +62,6 @@ private:
     oroEvent m_stop;
 };
 
-inline uint32_t __float_as_uint(float f) {
-    uint32_t r;
-    memcpy(&r, &f, sizeof(float));
-    return r;
-}
-inline int __float_as_int(float f) {
-    int r;
-    memcpy(&r, &f, sizeof(float));
-    return r;
-}
-
 int main() {
     using namespace pr;
 
@@ -157,7 +146,7 @@ int main() {
     options.push_back(GetDataPath("../"));
     Shader shader(GetDataPath("../main_gpu.cu").c_str(), "main_gpu", options);
 
-    TypedBuffer<float4> pixels(TYPED_BUFFER_DEVICE);
+    TypedBuffer<uint32_t> pixels(TYPED_BUFFER_DEVICE);
 
     Camera3D camera;
     camera.origin = { 8.0f, 8.0f, 8.0f };
@@ -261,36 +250,8 @@ int main() {
 
             if (gpuBuilder.empty())
             {
-                //minimum_lbvh::AABB sceneAABB = minimum_lbvh::AABB::empty();
-
-                //for (int i = 0; i < triangles.size(); i++)
-                //{
-                //    for (int j = 0; j < 3; ++j)
-                //    {
-                //        sceneAABB.extend(triangles[i].vs[j]);
-                //    }
-                //}
-                //printf("[cpu] lower %.5f %.5f %.5f\n", sceneAABB.lower.x, sceneAABB.lower.y, sceneAABB.lower.z);
-                //printf("[cpu] upper %.5f %.5f %.5f\n", sceneAABB.upper.x, sceneAABB.upper.y, sceneAABB.upper.z);
-
                 triangles.copyTo(&trianglesDevice);
                 gpuBuilder.build(trianglesDevice.data(), trianglesDevice.size(), onesweep, 0 /*stream*/);
-
-//#if 1
-//                Stopwatch sw;
-//                builder.build(triangles.data(), triangles.size(), true /* isParallel */);
-//                printf("build %f\n", sw.elapsed());
-//
-//                builder.validate();
-//
-//                // test
-//                //oroMemcpyDtoH(builder.m_internals.data(), gpuBuilder.m_internals, sizeof(minimum_lbvh::InternalNode) * (triangles.size() - 1));
-//                //oroMemcpyDtoH(&builder.m_rootNode, gpuBuilder.m_rootNode, sizeof(minimum_lbvh::NodeIndex));
-//#else
-//                Stopwatch sw;
-//                builder.buildByEmbree(triangles.data(), triangles.size(), RTC_BUILD_QUALITY_LOW);
-//                printf("embree build %f\n", sw.elapsed());
-//#endif
             }
         });
 
@@ -324,46 +285,9 @@ int main() {
             printf("render %f ms\n", sw.getElapsedMs());
         }
 
-        static Image2DRGBA32 image;
+        static Image2DRGBA8 image;
         image.allocate(imageWidth, imageHeight);
         oroMemcpyDtoH(image.data(), pixels.data(), pixels.bytes());
-
-        //int stride = 2;
-        //Image2DRGBA8 image;
-        //image.allocate(GetScreenWidth() / stride, GetScreenHeight() / stride);
-
-        //CameraRayGenerator rayGenerator(GetCurrentViewMatrix(), GetCurrentProjMatrix(), image.width(), image.height());
-
-        ////for (int j = 0; j < image.height(); ++j)
-        //ParallelFor(image.height(), [&](int j) {
-        //    for (int i = 0; i < image.width(); ++i)
-        //    {
-        //        glm::vec3 ro, rd;
-        //        rayGenerator.shoot(&ro, &rd, i, j, 0.5f, 0.5f);
-
-        //        minimum_lbvh::Hit hit;
-        //        minimum_lbvh::intersect(&hit, builder.m_internals.data(), triangles.data(), builder.m_rootNode, to(ro), to(rd), minimum_lbvh::invRd(to(rd)));
-        //        if (hit.t != FLT_MAX)
-        //        {
-        //            float3 n = normalize(hit.ng);
-        //            if (smooth)
-        //            {
-        //                TriangleAttrib attrib = triangleAttribs[hit.triangleIndex];
-        //                n = attrib.shadingNormals[0] +
-        //                    (attrib.shadingNormals[1] - attrib.shadingNormals[0]) * hit.uv.x +
-        //                    (attrib.shadingNormals[2] - attrib.shadingNormals[0]) * hit.uv.y;
-        //                n = normalize(n);
-        //            }
-        //            float3 color = (n + make_float3(1.0f)) * 0.5f;
-        //            image(i, j) = { 255 * color.x, 255 * color.y, 255 * color.z, 255 };
-        //        }
-        //        else
-        //        {
-        //            image(i, j) = { 0, 0, 0, 255 };
-        //        }
-        //    }
-        //}
-        //);
 
         texture->upload(image);
 
@@ -376,7 +300,6 @@ int main() {
         ImGui::Begin("Panel");
         ImGui::Text("fps = %f", GetFrameRate());
         ImGui::Checkbox("showWire", &showWire);
-        ImGui::Checkbox("smooth", &smooth);
 
         ImGui::End();
 
