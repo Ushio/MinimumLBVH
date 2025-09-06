@@ -146,9 +146,11 @@ extern "C" __global__ void ao(uint32_t* pixels, int2 imageSize, RayGenerator ray
         float3 dirLocal = sampleHemisphereCosWeighted(rng.uniformf(), rng.uniformf());
         float3 dir = xaxis * dirLocal.x + zaxis * dirLocal.z + n * dirLocal.y;
 
+        float length = 1.0f;
         Hit hit;
-        intersect(&hit, internals, triangles, *rootNode, ao_origin, dir, invRd(dir));
-        if (hit.t != MINIMUM_LBVH_FLT_MAX)
+        hit.t = length;
+        intersect(&hit, internals, triangles, *rootNode, ao_origin, dir, invRd(dir), RAY_QUERY_ANY);
+        if (hit.t != length)
         {
             ao += 1.0f / nSample;
         }

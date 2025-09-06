@@ -1017,6 +1017,12 @@ namespace minimum_lbvh
 		}
 	}
 
+	enum RAY_QUERY
+	{
+		RAY_QUERY_CLOSEST,
+		RAY_QUERY_ANY
+	};
+
 	MINIMUM_LBVH_DEVICE inline void intersect(
 		Hit* hit,
 		const InternalNode* nodes,
@@ -1024,7 +1030,8 @@ namespace minimum_lbvh
 		NodeIndex node,
 		float3 ro,
 		float3 rd,
-		float3 one_over_rd)
+		float3 one_over_rd,
+		RAY_QUERY rayQuery = RAY_QUERY_CLOSEST)
 	{
 		NodeIndex curr_node = node;
 		NodeIndex prev_node = NodeIndex::invalid();
@@ -1043,8 +1050,12 @@ namespace minimum_lbvh
 					hit->uv = make_float2(u, v);
 					hit->triangleIndex = curr_node.m_index;
 					hit->ng = ng;
-				}
 
+					if (rayQuery == RAY_QUERY_ANY)
+					{
+						break;
+					}
+				}
 				swap(&curr_node, &prev_node);
 				continue;
 			}
