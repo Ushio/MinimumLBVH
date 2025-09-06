@@ -266,7 +266,21 @@ int main() {
             RayGenerator rayGenerator;
             rayGenerator.lookat(to(camera.origin), to(camera.lookat), to(camera.up), camera.fovy, imageWidth, imageHeight);
 
-            shader.launch("render",
+            //shader.launch("render",
+            //    ShaderArgument()
+            //    .value(pixels.data())
+            //    .value(int2{ imageWidth, imageHeight })
+            //    .value(rayGenerator)
+            //    .value(gpuBuilder.m_rootNode)
+            //    .value(gpuBuilder.m_internals)
+            //    .value(trianglesDevice.data())
+            //    .value(stackBuffer.getBuffer()),
+            //    div_round_up64(imageWidth, 16), div_round_up64(imageHeight, 16), 1,
+            //    16, 16, 1,
+            //    0
+            //);
+
+            shader.launch("ao",
                 ShaderArgument()
                 .value(pixels.data())
                 .value(int2{ imageWidth, imageHeight })
@@ -276,7 +290,6 @@ int main() {
                 .value(trianglesDevice.data())
                 .value(stackBuffer.getBuffer()),
                 div_round_up64(imageWidth, 16), div_round_up64(imageHeight, 16), 1,
-                //1,1,1,
                 16, 16, 1,
                 0
             );
