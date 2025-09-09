@@ -152,7 +152,7 @@ int main() {
 
     SetDataDir(ExecutableDir());
     std::string err;
-    std::shared_ptr<FScene> scene = ReadWavefrontObj(GetDataPath("test.obj"), err);
+    std::shared_ptr<FScene> scene = ReadWavefrontObj(GetDataPath("assets/test.obj"), err);
 
     double e = GetElapsedTime();
     bool showWire = false;
@@ -273,9 +273,8 @@ int main() {
                 glm::vec3 ro, rd;
                 rayGenerator.shoot(&ro, &rd, i, j, 0.5f, 0.5f);
 
-                minimum_lbvh::NodeIndex s[64];
                 minimum_lbvh::Hit hit;
-                minimum_lbvh::intersect_stackfull(&hit, builder.m_internals.data(), triangles.data(), builder.m_rootNode, to(ro), to(rd), minimum_lbvh::invRd(to(rd)), s);
+                minimum_lbvh::intersect(&hit, builder.m_internals.data(), triangles.data(), builder.m_rootNode, to(ro), to(rd), minimum_lbvh::invRd(to(rd)));
                 if (hit.t != FLT_MAX)
                 {
                     float3 n = normalize(hit.ng);

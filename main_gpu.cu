@@ -1,6 +1,8 @@
 #include "minimum_lbvh.h"
 #include "helper_math.h"
 #include "camera.h"
+#include "sobol.h"
+
 using namespace minimum_lbvh;
 
 constexpr float PI = 3.14159265358979323846f;
@@ -102,7 +104,7 @@ extern "C" __global__ void render(uint32_t *pixels, int2 imageSize, RayGenerator
     freeStack(stack);
 }
 
-extern "C" __global__ void ao(uint32_t* pixels, int2 imageSize, RayGenerator rayGenerator, const NodeIndex* rootNode, const InternalNode* internals, const Triangle* triangles, NodeIndex* stackBuffer)
+extern "C" __global__ void ao(uint32_t* pixels, int2 imageSize, RayGenerator rayGenerator, const NodeIndex* rootNode, const InternalNode* internals, const Triangle* triangles, int useSobol )
 {
     int xi = threadIdx.x + blockDim.x * blockIdx.x;
     int yi = threadIdx.y + blockDim.y * blockIdx.y;
@@ -143,7 +145,17 @@ extern "C" __global__ void ao(uint32_t* pixels, int2 imageSize, RayGenerator ray
     float ao = 0.0f;
     for (int i = 0; i < nSample; i++)
     {
-        float3 dirLocal = sampleHemisphereCosWeighted(rng.uniformf(), rng.uniformf());
+        float2 random;
+        if (useSobol)
+        {
+            sobol::scrambled_sobol(&random.x, &random.y, i, pixel);
+        }
+        else
+        {
+            random = make_float2(rng.uniformf(), rng.uniformf());
+        }
+
+        float3 dirLocal = sampleHemisphereCosWeighted(random.x, random.y);
         float3 dir = xaxis * dirLocal.x + zaxis * dirLocal.z + n * dirLocal.y;
 
         float length = 1.0f;

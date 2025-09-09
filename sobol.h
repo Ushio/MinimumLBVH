@@ -1,0 +1,82 @@
+#pragma once
+#if defined( __CUDACC__ ) || defined( __HIPCC__ )
+#define SOBOL_DEVICE __device__
+#else
+#define SOBOL_DEVICE
+#include <stdint.h>
+#endif
+
+namespace sobol
+{
+    namespace details
+    {
+#if defined( __CUDACC__ ) || defined( __HIPCC__ )
+        using uint32_t = unsigned int;
+#endif
+        // Practical Hash-based Owen Scrambling
+        // https://jcgt.org/published/0009/04/01/
+        SOBOL_DEVICE inline uint32_t reverseBits(uint32_t v)
+        {
+            v = ((v >> 1) & 0x55555555) | ((v & 0x55555555) << 1);
+            v = ((v >> 2) & 0x33333333) | ((v & 0x33333333) << 2);
+            v = ((v >> 4) & 0x0F0F0F0F) | ((v & 0x0F0F0F0F) << 4);
+            v = ((v >> 8) & 0x00FF00FF) | ((v & 0x00FF00FF) << 8);
+            v = (v >> 16) | (v << 16);
+            return v;
+        }
+        SOBOL_DEVICE inline uint32_t laine_karras_permutation(uint32_t x, uint32_t seed)
+        {
+            x += seed;
+            x ^= x * 0x6c50b47cu;
+            x ^= x * 0xb82f1e52u;
+            x ^= x * 0xc7afe638u;
+            x ^= x * 0x8d22f6e6u;
+            return x;
+        }
+        SOBOL_DEVICE inline uint32_t nested_uniform_scramble(uint32_t x, uint32_t seed)
+        {
+            x = reverseBits(x);
+            x = laine_karras_permutation(x, seed);
+            x = reverseBits(x);
+            return x;
+        }
+
+        // An Implementation Algorithm of 2D Sobol Sequence Fast, Elegant, and Compact
+        // https://diglib.eg.org/items/57f2cdeb-69d9-434e-8cf8-37b63e7e69d9
+        // Multiply Pascal Matrix
+        SOBOL_DEVICE inline uint32_t P(uint32_t v /* take a reverse-bit index */)
+        {
+            v ^= v << 16;
+            v ^= (v & 0x00FF00FF) << 8;
+            v ^= (v & 0x0F0F0F0F) << 4;
+            v ^= (v & 0x33333333) << 2;
+            v ^= (v & 0x55555555) << 1;
+            return v;
+        }
+
+        SOBOL_DEVICE inline float random_float(uint32_t u)
+        {
+            uint32_t bits = (u >> 9) | 0x3f800000;
+            float value;
+            memcpy(&value, &bits, sizeof(float));
+            return value - 1.0f;
+        }
+
+        // Hash Functions for GPU Rendering
+        // https://jcgt.org/published/0009/03/02/
+        SOBOL_DEVICE inline uint32_t hashPCG(uint32_t v)
+        {
+            uint32_t state = v * 747796405 + 2891336453;
+            uint32_t word = ((state >> ((state >> 28) + 4)) ^ state) * 277803737;
+            return (word >> 22) ^ word;
+        }
+    }
+    SOBOL_DEVICE inline void scrambled_sobol(float* x, float* y, uint32_t index, uint32_t p)
+    {
+        using namespace details;
+
+        uint32_t v /* van der corput sequence */ = reverseBits(index);
+        *x = random_float(reverseBits(laine_karras_permutation(index, hashPCG(p ^ 0xa511e9b3))));
+        *y = random_float(nested_uniform_scramble(P(v), hashPCG(p ^ 0x63d83595)));
+    }
+}

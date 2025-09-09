@@ -157,11 +157,11 @@ int main() {
 
     SetDataDir(ExecutableDir());
     std::string err;
-    std::shared_ptr<FScene> scene = ReadWavefrontObj(GetDataPath("test.obj"), err);
+    std::shared_ptr<FScene> scene = ReadWavefrontObj(GetDataPath("assets/blocks_ao.obj"), err);
 
     double e = GetElapsedTime();
     bool showWire = false;
-    bool smooth = false;
+    bool useSobol = 0;
 
     // BVH
     TypedBuffer<minimum_lbvh::Triangle> triangles(TYPED_BUFFER_HOST);
@@ -288,7 +288,7 @@ int main() {
                 .value(gpuBuilder.m_rootNode)
                 .value(gpuBuilder.m_internals)
                 .value(trianglesDevice.data())
-                .value(stackBuffer.getBuffer()),
+                .value(useSobol ? 1 : 0),
                 div_round_up64(imageWidth, 16), div_round_up64(imageHeight, 16), 1,
                 16, 16, 1,
                 0
@@ -313,7 +313,7 @@ int main() {
         ImGui::Begin("Panel");
         ImGui::Text("fps = %f", GetFrameRate());
         ImGui::Checkbox("showWire", &showWire);
-
+        ImGui::Checkbox("use sobol", &useSobol);
         ImGui::End();
 
         EndImGui();
