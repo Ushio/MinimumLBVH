@@ -163,6 +163,13 @@ int main() {
     bool showWire = false;
     bool useSobol = 0;
 
+    enum {
+        MODE_NORMAL,
+        MODE_AO,
+        MODE_PT,
+    };
+    int mode = 2;
+
     // BVH
     TypedBuffer<minimum_lbvh::Triangle> triangles(TYPED_BUFFER_HOST);
     TypedBuffer<minimum_lbvh::Triangle> trianglesDevice(TYPED_BUFFER_DEVICE);
@@ -266,33 +273,53 @@ int main() {
             RayGenerator rayGenerator;
             rayGenerator.lookat(to(camera.origin), to(camera.lookat), to(camera.up), camera.fovy, imageWidth, imageHeight);
 
-            //shader.launch("render",
-            //    ShaderArgument()
-            //    .value(pixels.data())
-            //    .value(int2{ imageWidth, imageHeight })
-            //    .value(rayGenerator)
-            //    .value(gpuBuilder.m_rootNode)
-            //    .value(gpuBuilder.m_internals)
-            //    .value(trianglesDevice.data())
-            //    .value(stackBuffer.getBuffer()),
-            //    div_round_up64(imageWidth, 16), div_round_up64(imageHeight, 16), 1,
-            //    16, 16, 1,
-            //    0
-            //);
-
-            shader.launch("ao",
-                ShaderArgument()
-                .value(pixels.data())
-                .value(int2{ imageWidth, imageHeight })
-                .value(rayGenerator)
-                .value(gpuBuilder.m_rootNode)
-                .value(gpuBuilder.m_internals)
-                .value(trianglesDevice.data())
-                .value(useSobol ? 1 : 0),
-                div_round_up64(imageWidth, 16), div_round_up64(imageHeight, 16), 1,
-                16, 16, 1,
-                0
-            );
+            if (mode == 0)
+            {
+                shader.launch("normal",
+                    ShaderArgument()
+                    .value(pixels.data())
+                    .value(int2{ imageWidth, imageHeight })
+                    .value(rayGenerator)
+                    .value(gpuBuilder.m_rootNode)
+                    .value(gpuBuilder.m_internals)
+                    .value(trianglesDevice.data()),
+                    div_round_up64(imageWidth, 16), div_round_up64(imageHeight, 16), 1,
+                    16, 16, 1,
+                    0
+                );
+            }
+            else if( mode == 1)
+            {
+                shader.launch("ao",
+                    ShaderArgument()
+                    .value(pixels.data())
+                    .value(int2{ imageWidth, imageHeight })
+                    .value(rayGenerator)
+                    .value(gpuBuilder.m_rootNode)
+                    .value(gpuBuilder.m_internals)
+                    .value(trianglesDevice.data())
+                    .value(useSobol ? 1 : 0),
+                    div_round_up64(imageWidth, 16), div_round_up64(imageHeight, 16), 1,
+                    16, 16, 1,
+                    0
+                );
+            }
+            else
+            {
+                shader.launch("pt",
+                    ShaderArgument()
+                    .value(pixels.data())
+                    .value(int2{ imageWidth, imageHeight })
+                    .value(rayGenerator)
+                    .value(gpuBuilder.m_rootNode)
+                    .value(gpuBuilder.m_internals)
+                    .value(trianglesDevice.data())
+                    .value(useSobol ? 1 : 0),
+                    div_round_up64(imageWidth, 16), div_round_up64(imageHeight, 16), 1,
+                    16, 16, 1,
+                    0
+                );
+            }
 
             sw.stop();
             printf("render %f ms\n", sw.getElapsedMs());
@@ -314,6 +341,10 @@ int main() {
         ImGui::Text("fps = %f", GetFrameRate());
         ImGui::Checkbox("showWire", &showWire);
         ImGui::Checkbox("use sobol", &useSobol);
+
+        ImGui::RadioButton("normal", &mode, 0);
+        ImGui::RadioButton("ao", &mode, 1);
+        ImGui::RadioButton("pt", &mode, 2);
         ImGui::End();
 
         EndImGui();

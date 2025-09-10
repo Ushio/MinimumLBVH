@@ -71,12 +71,17 @@ namespace sobol
             return (word >> 22) ^ word;
         }
     }
-    SOBOL_DEVICE inline void scrambled_sobol(float* x, float* y, uint32_t index, uint32_t p)
+    SOBOL_DEVICE inline void scrambled_sobol_2d(float* x, float* y, uint32_t index, uint32_t p)
     {
         using namespace details;
 
         uint32_t v /* van der corput sequence */ = reverseBits(index);
         *x = random_float(reverseBits(laine_karras_permutation(index, hashPCG(p ^ 0xa511e9b3))));
         *y = random_float(nested_uniform_scramble(P(v), hashPCG(p ^ 0x63d83595)));
+    }
+    SOBOL_DEVICE inline void scrambled_sobol_2d(float* x, float* y, uint32_t index, uint32_t p0, uint32_t p1)
+    {
+        using namespace details;
+        scrambled_sobol_2d(x, y, index, hashPCG(hashPCG(p0) + p1));
     }
 }

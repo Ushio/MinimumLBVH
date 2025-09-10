@@ -72,12 +72,10 @@ struct PCG
     uint64_t inc;    // Controls which RNG sequence(stream) is selected. Must *always* be odd.
 };
 
-extern "C" __global__ void render(uint32_t *pixels, int2 imageSize, RayGenerator rayGenerator, const NodeIndex* rootNode, const InternalNode* internals, const Triangle* triangles, NodeIndex* stackBuffer )
+extern "C" __global__ void normal(uint32_t *pixels, int2 imageSize, RayGenerator rayGenerator, const NodeIndex* rootNode, const InternalNode* internals, const Triangle* triangles )
 {
     int xi = threadIdx.x + blockDim.x * blockIdx.x;
     int yi = threadIdx.y + blockDim.y * blockIdx.y;
-
-    NodeIndex* stack = allocStack(stackBuffer);
 
     if (xi < imageSize.x && yi < imageSize.y)
     {
@@ -88,7 +86,6 @@ extern "C" __global__ void render(uint32_t *pixels, int2 imageSize, RayGenerator
 
         Hit hit;
         intersect(&hit, internals, triangles, *rootNode, ro, rd, invRd(rd));
-        // intersect_stackfull(&hit, internals, triangles, *rootNode, ro, rd, invRd(rd), stack);
         if (hit.t != MINIMUM_LBVH_FLT_MAX)
         {
             float3 n = normalize(hit.ng);
@@ -100,8 +97,6 @@ extern "C" __global__ void render(uint32_t *pixels, int2 imageSize, RayGenerator
             pixels[pixel] = packRGBA({ 0, 0, 0, 1 });
         }
     }
-
-    freeStack(stack);
 }
 
 extern "C" __global__ void ao(uint32_t* pixels, int2 imageSize, RayGenerator rayGenerator, const NodeIndex* rootNode, const InternalNode* internals, const Triangle* triangles, int useSobol )
@@ -148,7 +143,7 @@ extern "C" __global__ void ao(uint32_t* pixels, int2 imageSize, RayGenerator ray
         float2 random;
         if (useSobol)
         {
-            sobol::scrambled_sobol(&random.x, &random.y, i, pixel);
+            sobol::scrambled_sobol_2d(&random.x, &random.y, i, pixel);
         }
         else
         {
@@ -169,6 +164,85 @@ extern "C" __global__ void ao(uint32_t* pixels, int2 imageSize, RayGenerator ray
     }
     float brightness = powf(1.0f - ao, 1.0f / 2.2f);
     float3 color = { brightness, brightness , brightness };
-    // float3 color = (n + make_float3(1.0f)) * 0.5f;
     pixels[pixel] = packRGBA({ color.x, color.y, color.z, 1.0f });
+}
+
+extern "C" __global__ void pt(uint32_t* pixels, int2 imageSize, RayGenerator rayGenerator, const NodeIndex* rootNode, const InternalNode* internals, const Triangle* triangles, int useSobol)
+{
+    int xi = threadIdx.x + blockDim.x * blockIdx.x;
+    int yi = threadIdx.y + blockDim.y * blockIdx.y;
+
+    if (imageSize.x <= xi && imageSize.y <= yi)
+    {
+        return;
+    }
+
+    int pixel = xi + yi * imageSize.x;
+
+    PCG rng(hashPCG(pixel), 0);
+
+    float3 color = {};
+    int nSample = 8;
+    for (int i = 0; i < nSample; i++)
+    {
+        float3 ro, rd;
+        rayGenerator.shoot(&ro, &rd, (float)xi / imageSize.x, (float)yi / imageSize.y);
+
+        float3 throughput = { 1.0f, 1.0f, 1.0f };
+
+        Hit hit;
+        intersect(&hit, internals, triangles, *rootNode, ro, rd, invRd(rd));
+        if (hit.t == MINIMUM_LBVH_FLT_MAX)
+        {
+            continue;
+        }
+
+        for (int depth = 0; depth < 4; depth++)
+        {
+            float2 random;
+            if (useSobol)
+            {
+                sobol::scrambled_sobol_2d(&random.x, &random.y, i, pixel, depth);
+            }
+            else
+            {
+                random = make_float2(rng.uniformf(), rng.uniformf());
+            }
+
+            float3 hit_p = ro + rd * hit.t;
+            float3 hit_n = normalize(hit.ng);
+            if (0.0f < dot(hit_n, rd))
+            {
+                hit_n = -hit_n;
+            }
+
+            float3 xaxis;
+            float3 zaxis;
+            GetOrthonormalBasis(hit_n, &xaxis, &zaxis);
+            float3 dirLocal = sampleHemisphereCosWeighted(random.x, random.y);
+            float3 next_ro = hit_p + hit_n * 0.0001f;
+            float3 next_rd = xaxis * dirLocal.x + zaxis * dirLocal.z + hit_n * dirLocal.y;
+
+            throughput *= make_float3(0.7f, 0.65f, 0.67f);
+
+            hit = Hit();
+            intersect(&hit, internals, triangles, *rootNode, next_ro, next_rd, invRd(next_rd));
+            if (hit.t == MINIMUM_LBVH_FLT_MAX)
+            {
+                color += throughput * make_float3(1.0f);
+                break;
+            }
+
+            ro = next_ro;
+            rd = next_rd;
+        }
+    }
+
+    color /= nSample;
+
+    pixels[pixel] = packRGBA({ 
+        powf(color.x, 1.0f / 2.2f), 
+        powf(color.y, 1.0f / 2.2f), 
+        powf(color.z, 1.0f / 2.2f), 
+        1.0f });
 }
