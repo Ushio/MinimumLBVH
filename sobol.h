@@ -54,12 +54,12 @@ namespace sobol
             return v;
         }
 
+        // [0.0, 1.0)
         SOBOL_DEVICE inline float random_float(uint32_t u)
         {
-            uint32_t bits = (u >> 9) | 0x3f800000;
-            float value;
-            memcpy(&value, &bits, sizeof(float));
-            return value - 1.0f;
+            enum { s = 8u };
+            static_assert((float)(0xFFFFFFFF >> s) / ((0xFFFFFFFF >> s) + 1) == 0.99999994f, "");
+            return (float)(u >> s) / ((0xFFFFFFFF >> s) + 1);
         }
 
         // Hash Functions for GPU Rendering

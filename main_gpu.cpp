@@ -14,6 +14,7 @@
 
 #include "typedbuffer.h"
 #include "shader.h"
+#include "sobol.h"
 
 inline glm::vec3 to(float3 p)
 {
