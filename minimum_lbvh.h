@@ -4,13 +4,6 @@
 
 #if ( defined( __CUDACC__ ) || defined( __HIPCC__ ) )
 #define MINIMUM_LBVH_KERNELCC
-
-#if defined(__CUDACC__)
-#define MINIMUM_LBVH_SHFL(val, src_line) __shfl_sync(0xffffffff, val, src_line)
-#else
-#define MINIMUM_LBVH_SHFL(val, src_line) __shfl(val, src_line)
-#endif
-
 #endif
 
 #if defined(MINIMUM_LBVH_KERNELCC)
@@ -40,12 +33,6 @@
 
 #define MINIMUM_LBVH_FLT_MAX 3.402823466e+38F
 #define MORTON_MAX_VALUE_3D 0x1FFFFF
-
-#define MINIMUM_LBVH_WARP_SIZE 32
-#define MINIMUM_LBVH_MAX_STACK_COUNT 63
-#define MINIMUM_LBVH_MAX_OCCUPANCY 16
-#define MINIMUM_LBVH_MAX_COMPUTE_UNIT 512
-#define MINIMUM_LBVH_STACK_BUFFER_COUNT ((MINIMUM_LBVH_MAX_STACK_COUNT + 1) * MINIMUM_LBVH_WARP_SIZE * MINIMUM_LBVH_MAX_OCCUPANCY * MINIMUM_LBVH_MAX_COMPUTE_UNIT)
 
 namespace minimum_lbvh
 {
@@ -698,28 +685,6 @@ namespace minimum_lbvh
 		oroEvent m_stop;
 	};
 
-	class BVHGPUStackBuffer
-	{
-	public:
-		BVHGPUStackBuffer()
-		{
-			oroMalloc((void**)&m_buffer, sizeof(uint32_t) * MINIMUM_LBVH_STACK_BUFFER_COUNT);
-			oroMemsetD32(m_buffer, 0, MINIMUM_LBVH_STACK_BUFFER_COUNT);
-		}
-		~BVHGPUStackBuffer()
-		{
-			oroFree(m_buffer);
-		}
-		BVHGPUStackBuffer(const BVHGPUStackBuffer&) = delete;
-		void operator=(const BVHGPUStackBuffer&) = delete;
-
-		uint32_t* getBuffer()
-		{
-			return m_buffer;
-		}
-		uint32_t* m_buffer;
-	};
-
 	class BVHGPUBuilder
 	{
 	public:
@@ -904,54 +869,6 @@ namespace minimum_lbvh
 		uint32_t word = ((state >> ((state >> 28) + 4)) ^ state) * 277803737;
 		return (word >> 22) ^ word;
 	}
-
-	MINIMUM_LBVH_DEVICE inline uint32_t hashPCG3(uint32_t x, uint32_t y, uint32_t z)
-	{
-		return hashPCG(hashPCG(hashPCG(x) + y) + z);
-	}
-
-#if defined(MINIMUM_LBVH_KERNELCC)
-	MINIMUM_LBVH_DEVICE inline int laneIdx()
-	{
-		return (threadIdx.x + threadIdx.y * blockDim.x + threadIdx.z * blockDim.x * blockDim.y) % MINIMUM_LBVH_WARP_SIZE;
-	}
-
-	MINIMUM_LBVH_DEVICE inline NodeIndex* allocStack(NodeIndex* stackBuffer)
-	{
-		const int CHUNK_SIZE = (MINIMUM_LBVH_MAX_STACK_COUNT + 1) * MINIMUM_LBVH_WARP_SIZE;
-		const int CHUNK_COUNT = MINIMUM_LBVH_STACK_BUFFER_COUNT / CHUNK_SIZE;
-
-		uint32_t chunkIndex;
-		int lane = laneIdx();
-		if (lane == 0)
-		{
-			int x = threadIdx.x + blockDim.x * blockIdx.x;
-			int y = threadIdx.y + blockDim.y * blockIdx.y;
-			int z = threadIdx.z + blockDim.z * blockIdx.z;
-			chunkIndex = hashPCG3(x, y, z) % CHUNK_COUNT;
-
-			while (atomicExch((uint32_t*)(stackBuffer + chunkIndex * CHUNK_SIZE), 1) != 0)
-			{
-				chunkIndex = (chunkIndex + 1) % CHUNK_COUNT;
-			}
-		}
-
-		__threadfence();
-
-		chunkIndex = MINIMUM_LBVH_SHFL(chunkIndex, 0);
-
-		return stackBuffer + chunkIndex * CHUNK_SIZE + (MINIMUM_LBVH_MAX_STACK_COUNT + 1) * lane + 1;
-	}
-	MINIMUM_LBVH_DEVICE inline void freeStack(NodeIndex* stack)
-	{
-		__threadfence();
-
-		if (laneIdx() == 0)
-		{
-			atomicExch((uint32_t*)stack - 1, 0);
-		}
-	}
-#endif
 
 	// stackful traversal for reference
 	MINIMUM_LBVH_DEVICE inline void intersect_stackfull(

@@ -177,8 +177,6 @@ int main() {
     minimum_lbvh::BVHCPUBuilder builder;
     TypedBuffer<TriangleAttrib> triangleAttribs(TYPED_BUFFER_HOST);
 
-    minimum_lbvh::BVHGPUStackBuffer stackBuffer;
-
     ITexture* texture = CreateTexture();
 
     while (pr::NextFrame() == false) {
