@@ -57,8 +57,13 @@ namespace sobol
         // [0.0, 1.0)
         SOBOL_DEVICE inline float random_float(uint32_t u)
         {
-            enum { s = 8u };
-            static_assert((float)(0xFFFFFFFF >> s) / ((0xFFFFFFFF >> s) + 1) == 0.99999994f, "");
+            // take minimum s to satisfy [0.0, 1.0)
+            enum {
+                s = 8u,
+                bad = s - 1
+            };
+            static_assert((float)(0xFFFFFFFF >> bad) / ((0xFFFFFFFF >> bad) + 1) == 1.0f, "");
+            static_assert((float)(0xFFFFFFFF >> s  ) / ((0xFFFFFFFF >> s  ) + 1) == 0.99999994f, "");
             return (float)(u >> s) / ((0xFFFFFFFF >> s) + 1);
         }
 
