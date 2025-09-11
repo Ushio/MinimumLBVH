@@ -167,7 +167,7 @@ extern "C" __global__ void ao(uint32_t* pixels, int2 imageSize, RayGenerator ray
     pixels[pixel] = packRGBA({ color.x, color.y, color.z, 1.0f });
 }
 
-extern "C" __global__ void pt(uint32_t* pixels, int2 imageSize, RayGenerator rayGenerator, const NodeIndex* rootNode, const InternalNode* internals, const Triangle* triangles, int useSobol)
+extern "C" __global__ void pt(uint32_t* pixels, float4 *accumulators, int2 imageSize, RayGenerator rayGenerator, const NodeIndex* rootNode, const InternalNode* internals, const Triangle* triangles, int useSobol, int maxSPP)
 {
     int xi = threadIdx.x + blockDim.x * blockIdx.x;
     int yi = threadIdx.y + blockDim.y * blockIdx.y;
@@ -179,70 +179,70 @@ extern "C" __global__ void pt(uint32_t* pixels, int2 imageSize, RayGenerator ray
 
     int pixel = xi + yi * imageSize.x;
 
-    PCG rng(hashPCG(pixel), 0);
+    float4 acc = accumulators[pixel];
+    int iteration = acc.w;
+
+    PCG rng(hashPCG(hashPCG(pixel) + iteration), 0);
+
+    float3 ro, rd;
+    rayGenerator.shoot(&ro, &rd, (float)xi / imageSize.x, (float)yi / imageSize.y);
 
     float3 color = {};
-    int nSample = 8;
-    for (int i = 0; i < nSample; i++)
+    float3 throughput = { 1.0f, 1.0f, 1.0f };
+
+    Hit hit;
+    intersect(&hit, internals, triangles, *rootNode, ro, rd, invRd(rd));
+
+    if (hit.t != MINIMUM_LBVH_FLT_MAX)
+    for (int depth = 0; depth < 4; depth++)
     {
-        float3 ro, rd;
-        rayGenerator.shoot(&ro, &rd, (float)xi / imageSize.x, (float)yi / imageSize.y);
-
-        float3 throughput = { 1.0f, 1.0f, 1.0f };
-
-        Hit hit;
-        intersect(&hit, internals, triangles, *rootNode, ro, rd, invRd(rd));
-        if (hit.t == MINIMUM_LBVH_FLT_MAX)
+        float2 random;
+        if (useSobol)
         {
-            continue;
+            sobol::scrambled_sobol_2d(&random.x, &random.y, iteration, pixel, depth);
+        }
+        else
+        {
+            random = make_float2(rng.uniformf(), rng.uniformf());
         }
 
-        for (int depth = 0; depth < 4; depth++)
+        float3 hit_p = ro + rd * hit.t;
+        float3 hit_n = normalize(hit.ng);
+        if (0.0f < dot(hit_n, rd))
         {
-            float2 random;
-            if (useSobol)
-            {
-                sobol::scrambled_sobol_2d(&random.x, &random.y, i, pixel, depth);
-            }
-            else
-            {
-                random = make_float2(rng.uniformf(), rng.uniformf());
-            }
-
-            float3 hit_p = ro + rd * hit.t;
-            float3 hit_n = normalize(hit.ng);
-            if (0.0f < dot(hit_n, rd))
-            {
-                hit_n = -hit_n;
-            }
-
-            float3 xaxis;
-            float3 zaxis;
-            GetOrthonormalBasis(hit_n, &xaxis, &zaxis);
-            float3 dirLocal = sampleHemisphereCosWeighted(random.x, random.y);
-            float3 next_ro = hit_p + hit_n * 0.0001f;
-            float3 next_rd = xaxis * dirLocal.x + zaxis * dirLocal.z + hit_n * dirLocal.y;
-
-            throughput *= make_float3(0.7f, 0.65f, 0.67f);
-
-            hit = Hit();
-            intersect(&hit, internals, triangles, *rootNode, next_ro, next_rd, invRd(next_rd));
-            if (hit.t == MINIMUM_LBVH_FLT_MAX)
-            {
-                color += throughput * make_float3(1.0f);
-                break;
-            }
-
-            ro = next_ro;
-            rd = next_rd;
+            hit_n = -hit_n;
         }
+
+        float3 xaxis;
+        float3 zaxis;
+        GetOrthonormalBasis(hit_n, &xaxis, &zaxis);
+        float3 dirLocal = sampleHemisphereCosWeighted(random.x, random.y);
+        float3 next_ro = hit_p + hit_n * 0.0001f;
+        float3 next_rd = xaxis * dirLocal.x + zaxis * dirLocal.z + hit_n * dirLocal.y;
+
+        throughput *= make_float3(0.7f, 0.65f, 0.67f);
+
+        hit = Hit();
+        intersect(&hit, internals, triangles, *rootNode, next_ro, next_rd, invRd(next_rd));
+        if (hit.t == MINIMUM_LBVH_FLT_MAX )
+        {
+            color += throughput * make_float3(1.0f);
+            break;
+        }
+
+        ro = next_ro;
+        rd = next_rd;
     }
 
-    color /= nSample;
+    if (iteration < maxSPP)
+    {
+        acc += make_float4(color.x, color.y, color.z, 1);
+        accumulators[pixel] = acc;
+    }
 
     pixels[pixel] = packRGBA({ 
-        powf(color.x, 1.0f / 2.2f), 
-        powf(color.y, 1.0f / 2.2f), 
-        powf(color.z, 1.0f / 2.2f), 
+        powf(acc.x / acc.w, 1.0f / 2.2f), 
+        powf(acc.y / acc.w, 1.0f / 2.2f), 
+        powf(acc.z / acc.w, 1.0f / 2.2f), 
         1.0f });
 }

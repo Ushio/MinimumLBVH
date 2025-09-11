@@ -147,6 +147,7 @@ int main() {
     Shader shader(GetDataPath("../main_gpu.cu").c_str(), "main_gpu", options);
 
     TypedBuffer<uint32_t> pixels(TYPED_BUFFER_DEVICE);
+    TypedBuffer<float4> accumulators(TYPED_BUFFER_DEVICE);
 
     Camera3D camera;
     camera.origin = { 8.0f, 8.0f, 8.0f };
@@ -161,7 +162,7 @@ int main() {
 
     double e = GetElapsedTime();
     bool showWire = false;
-    bool useSobol = 0;
+    bool useSobol = true;
 
     enum {
         MODE_NORMAL,
@@ -169,6 +170,7 @@ int main() {
         MODE_PT,
     };
     int mode = 2;
+    int maxSPP = 16;
 
     // BVH
     TypedBuffer<minimum_lbvh::Triangle> triangles(TYPED_BUFFER_HOST);
@@ -181,7 +183,10 @@ int main() {
 
     while (pr::NextFrame() == false) {
         if (IsImGuiUsingMouse() == false) {
-            UpdateCameraBlenderLike(&camera);
+            if (UpdateCameraBlenderLike(&camera))
+            {
+                oroMemsetD8(accumulators.data(), 0, accumulators.size() * sizeof(float4));
+            }
         }
         
         //ClearBackground(0.1f, 0.1f, 0.1f, 1);
@@ -191,11 +196,8 @@ int main() {
 
         PushGraphicState();
 
-        DrawGrid(GridAxis::XY, 1.0f, 10, { 128, 128, 128 });
+        DrawGrid(GridAxis::XZ, 1.0f, 10, { 128, 128, 128 });
         DrawXYZAxis(1.0f);
-
-        static glm::vec3 test_p;
-        ManipulatePosition(camera, &test_p, 0.3f);
 
         scene->visitPolyMesh([&](std::shared_ptr<const FPolyMeshEntity> polymesh) {
             if (polymesh->visible() == false)
@@ -264,6 +266,13 @@ int main() {
         int imageHeight = GetScreenHeight();
 
         pixels.allocate(imageWidth * imageHeight);
+
+        if (accumulators.size() != imageWidth * imageHeight)
+        {
+            accumulators.allocate(imageWidth* imageHeight);
+            oroMemsetD8(accumulators.data(), 0, accumulators.size() * sizeof(float4));
+        }
+
         {
             DeviceStopwatch sw(0);
             sw.start();
@@ -307,12 +316,14 @@ int main() {
                 shader.launch("pt",
                     ShaderArgument()
                     .value(pixels.data())
+                    .value(accumulators.data())
                     .value(int2{ imageWidth, imageHeight })
                     .value(rayGenerator)
                     .value(gpuBuilder.m_rootNode)
                     .value(gpuBuilder.m_internals)
                     .value(trianglesDevice.data())
-                    .value(useSobol ? 1 : 0),
+                    .value(useSobol ? 1 : 0)
+                    .value(maxSPP),
                     div_round_up64(imageWidth, 16), div_round_up64(imageHeight, 16), 1,
                     16, 16, 1,
                     0
@@ -338,7 +349,15 @@ int main() {
         ImGui::Begin("Panel");
         ImGui::Text("fps = %f", GetFrameRate());
         ImGui::Checkbox("showWire", &showWire);
-        ImGui::Checkbox("use sobol", &useSobol);
+        if (ImGui::Checkbox("use sobol", &useSobol))
+        {
+            oroMemsetD8(accumulators.data(), 0, accumulators.size() * sizeof(float4));
+        }
+        ImGui::InputInt("max spp", &maxSPP);
+
+        float4 pix;
+        oroMemcpyDtoH(&pix, accumulators.data(), sizeof(pix));
+        ImGui::Text("spp : %d", (int)pix.w);
 
         ImGui::RadioButton("normal", &mode, 0);
         ImGui::RadioButton("ao", &mode, 1);
