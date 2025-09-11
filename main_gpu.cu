@@ -143,7 +143,7 @@ extern "C" __global__ void ao(uint32_t* pixels, int2 imageSize, RayGenerator ray
         float2 random;
         if (useSobol)
         {
-            sobol::scrambled_sobol_2d(&random.x, &random.y, i, pixel);
+            sobol::scrambled_sobol_2d(&random.x, &random.y, i, xi, yi);
         }
         else
         {

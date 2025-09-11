@@ -1129,6 +1129,42 @@ inline HELPER_MATH_HOST HELPER_MATH_DEVICE float4 operator/(float b, float4 a)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// bitwise
+////////////////////////////////////////////////////////////////////////////////
+
+inline HELPER_MATH_HOST HELPER_MATH_DEVICE uint2 operator>>(uint2 a, uint32_t s)
+{
+    return { a.x >> s, a.y >> s };
+}
+inline HELPER_MATH_HOST HELPER_MATH_DEVICE void operator^=(uint2& a, uint2 b)
+{
+    a.x ^= b.x;
+    a.y ^= b.y;
+}
+
+inline HELPER_MATH_HOST HELPER_MATH_DEVICE uint3 operator>>(uint3 a, uint32_t s)
+{
+    return { a.x >> s, a.y >> s, a.z >> s };
+}
+inline HELPER_MATH_HOST HELPER_MATH_DEVICE void operator^=(uint3& a, uint3 b)
+{
+    a.x ^= b.x;
+    a.y ^= b.y;
+    a.z ^= b.z;
+}
+inline HELPER_MATH_HOST HELPER_MATH_DEVICE uint4 operator>>(uint4 a, uint32_t s)
+{
+    return { a.x >> s, a.y >> s, a.z >> s, a.w >> s };
+}
+inline HELPER_MATH_HOST HELPER_MATH_DEVICE void operator^=(uint4& a, uint4 b)
+{
+    a.x ^= b.x;
+    a.y ^= b.y;
+    a.z ^= b.z;
+    a.w ^= b.w;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // min
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -64,24 +64,39 @@ namespace sobol
 
         // Hash Functions for GPU Rendering
         // https://jcgt.org/published/0009/03/02/
-        SOBOL_DEVICE inline uint32_t hashPCG(uint32_t v)
+        SOBOL_DEVICE inline void pcg2d(uint32_t *out_x, uint32_t* out_y, uint32_t x, uint32_t y)
         {
-            uint32_t state = v * 747796405 + 2891336453;
-            uint32_t word = ((state >> ((state >> 28) + 4)) ^ state) * 277803737;
-            return (word >> 22) ^ word;
+            x *= 1664525u;
+            y *= 1664525u;
+
+            x += 1013904223u;
+            y += 1013904223u;
+
+            x += y * 1664525u;
+            y += x * 1664525u;
+
+            x ^= x >> 16u;
+            y ^= y >> 16u;
+
+            x += y * 1664525u;
+            y += x * 1664525u;
+
+            x ^= x >> 16u;
+            y ^= y >> 16u;
+
+            *out_x = x;
+            *out_y = y;
         }
     }
-    SOBOL_DEVICE inline void scrambled_sobol_2d(float* x, float* y, uint32_t index, uint32_t p)
-    {
-        using namespace details;
 
-        uint32_t v /* van der corput sequence */ = reverseBits(index);
-        *x = random_float(reverseBits(laine_karras_permutation(index, hashPCG(p ^ 0xa511e9b3))));
-        *y = random_float(nested_uniform_scramble(P(v), hashPCG(p ^ 0x63d83595)));
-    }
     SOBOL_DEVICE inline void scrambled_sobol_2d(float* x, float* y, uint32_t index, uint32_t p0, uint32_t p1)
     {
         using namespace details;
-        scrambled_sobol_2d(x, y, index, hashPCG(hashPCG(p0) + p1));
+        uint32_t p2, p3;
+        pcg2d(&p2, &p3, p0, p1);
+
+        uint32_t v /* van der corput sequence */ = reverseBits(index);
+        *x = random_float(reverseBits(laine_karras_permutation(index, p2)));
+        *y = random_float(nested_uniform_scramble(P(v), p3));
     }
 }
