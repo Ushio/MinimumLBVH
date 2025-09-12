@@ -79,7 +79,7 @@ int main() {
         return 0;
     }
 
-    int DEVICE_INDEX = 2;
+    int DEVICE_INDEX = 0;
     oroInit(0);
     oroDevice device;
     oroDeviceGet(&device, DEVICE_INDEX);
@@ -151,15 +151,16 @@ int main() {
     TypedBuffer<float4> accumulators(TYPED_BUFFER_DEVICE);
 
     Camera3D camera;
-    camera.origin = { 8.0f, 8.0f, 8.0f };
-    camera.lookat = { 0, 0, 0 };
+    camera.origin = { 0.0f, 1.0f, 4.0f };
+    camera.lookat = { 0, 1.0f, 0 };
 
     //camera.fovy = 0.002f;
     //camera.origin = { 500, 500, 500 };
 
     SetDataDir(ExecutableDir());
     std::string err;
-    std::shared_ptr<FScene> scene = ReadWavefrontObj(GetDataPath("assets/blocks_ao.obj"), err);
+    //std::shared_ptr<FScene> scene = ReadWavefrontObj(GetDataPath("assets/blocks_ao.obj"), err);
+    std::shared_ptr<FScene> scene = ReadWavefrontObj(GetDataPath("assets/cornelbox.obj"), err);
 
     double e = GetElapsedTime();
     bool showWire = false;

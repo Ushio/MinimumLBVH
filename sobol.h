@@ -79,6 +79,32 @@ namespace sobol
             uint32_t word = ((state >> ((state >> 28) + 4)) ^ state) * 277803737;
             return (word >> 22) ^ word;
         }
+
+        SOBOL_DEVICE inline void pcg3d(uint32_t* x, uint32_t* y, uint32_t* z) {
+            uint32_t vx = *x;
+            uint32_t vy = *y;
+            uint32_t vz = *z;
+
+            vx = vx * 1664525u + 1013904223u;
+            vy = vy * 1664525u + 1013904223u;
+            vz = vz * 1664525u + 1013904223u;
+
+            vx += vy * vz;
+            vy += vz * vx;
+            vz += vx * vy;
+
+            vx ^= vx >> 16u;
+            vy ^= vy >> 16u;
+            vz ^= vz >> 16u;
+
+            vx += vy * vz;
+            vy += vz * vx;
+            vz += vx * vy;
+
+            *x = vx;
+            *y = vy;
+            *z = vz;
+        }
     }
 
     SOBOL_DEVICE inline void sobol_2d(float* x, float* y, uint32_t index)
@@ -90,13 +116,15 @@ namespace sobol
         *y = random_float(P(v));
     }
 
-    SOBOL_DEVICE inline void shuffled_sobol_2d(float* x, float* y, uint32_t index, uint32_t p0, uint32_t p1)
+    SOBOL_DEVICE inline void shuffled_scrambled_sobol_2d(float* x, float* y, uint32_t index, uint32_t p0, uint32_t p1, uint32_t p2)
     {
         using namespace details;
 
-        uint32_t p = hashPCG(hashPCG(p0) + p1);
-        uint32_t v /* van der corput sequence */ = laine_karras_permutation(reverseBits(index), p);
-        *x = random_float(v);
-        *y = random_float(P(v));
+        pcg3d(&p0, &p1, &p2);
+
+        uint32_t v /* van der corput sequence */ = laine_karras_permutation(reverseBits(index), p0);
+
+        *x = random_float(nested_uniform_scramble(v,    p1));
+        *y = random_float(nested_uniform_scramble(P(v), p2));
     }
 }
