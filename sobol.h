@@ -17,12 +17,16 @@ namespace sobol
         // https://jcgt.org/published/0009/04/01/
         SOBOL_DEVICE inline uint32_t reverseBits(uint32_t v)
         {
+#if defined( __CUDACC__ ) || defined( __HIPCC__ )
+            return __brev(v);
+#else
             v = ((v >> 1) & 0x55555555) | ((v & 0x55555555) << 1);
             v = ((v >> 2) & 0x33333333) | ((v & 0x33333333) << 2);
             v = ((v >> 4) & 0x0F0F0F0F) | ((v & 0x0F0F0F0F) << 4);
             v = ((v >> 8) & 0x00FF00FF) | ((v & 0x00FF00FF) << 8);
             v = (v >> 16) | (v << 16);
             return v;
+#endif
         }
         SOBOL_DEVICE inline uint32_t laine_karras_permutation(uint32_t x, uint32_t seed)
         {
@@ -86,7 +90,7 @@ namespace sobol
         *y = random_float(P(v));
     }
 
-    SOBOL_DEVICE inline void scrambled_sobol_2d(float* x, float* y, uint32_t index, uint32_t p0, uint32_t p1)
+    SOBOL_DEVICE inline void shuffled_sobol_2d(float* x, float* y, uint32_t index, uint32_t p0, uint32_t p1)
     {
         using namespace details;
 
