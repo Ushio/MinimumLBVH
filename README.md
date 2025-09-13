@@ -1,5 +1,5 @@
 ## Simple and Minimum LBVH for ray tracing
-LBVH construction from "Fast and Simple Agglomerative LBVH Construction" and stackfree ray traversal based via "A Stack-Free Traversal Algorithm for Left-Balanced k-d Trees", but not left-balanced. This implementation keeps it as simple as possible; thus performance is sacrificed.
+LBVH construction from "Fast and Simple Agglomerative LBVH Construction" and stackfree ray traversal based via "A Stack-Free Traversal Algorithm for Left-Balanced k-d Trees", but not left-balanced. This implementation keeps it as simple as possible and all self-contained; thus performance is sacrificed.
 
 ## build
 ```
