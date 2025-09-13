@@ -211,7 +211,7 @@ extern "C" __global__ void pt(uint32_t* pixels, float4 *accumulators, int2 image
     intersect(&hit, internals, triangles, *rootNode, ro, rd, invRd(rd));
 
     if (hit.t != MINIMUM_LBVH_FLT_MAX)
-    for (int depth = 0; depth < 4; depth++)
+    for (int depth = 0; depth < 1024; depth++)
     {
         float2 random;
         if (useSobol)
@@ -240,6 +240,16 @@ extern "C" __global__ void pt(uint32_t* pixels, float4 *accumulators, int2 image
         float3 next_rd = xaxis * dirLocal.x + zaxis * dirLocal.z + hit_n * dirLocal.y;
 
         throughput *= triangleAttribs[hit.triangleIndex].reflectance;
+
+        const float rrThreshold = 0.25f;
+        float maxComp = fmaxf(fmaxf(throughput.x, throughput.y), throughput.z);
+
+        float p = fminf(maxComp / rrThreshold, 1.0f);
+        if (p < rng.uniformf())
+        {
+            break;
+        }
+        throughput /= p;
 
         hit = Hit();
         intersect(&hit, internals, triangles, *rootNode, next_ro, next_rd, invRd(next_rd));
