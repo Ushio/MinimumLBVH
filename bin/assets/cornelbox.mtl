@@ -1,4 +1,4 @@
-# Blender 4.2.0 MTL File: 'scene.blend'
+# Blender 4.2.0 MTL File: 'cornelbox.blend'
 # www.blender.org
 
 newmtl backWall
@@ -56,7 +56,7 @@ Ns 250.000000
 Ka 1.000000 1.000000 1.000000
 Kd 0.800000 0.800000 0.800000
 Ks 0.500000 0.500000 0.500000
-Ke 30.000000 30.000000 30.000000
+Ke 30.000000 24.665525 17.499191
 Ni 1.500000
 d 1.000000
 illum 2
