@@ -67,9 +67,12 @@ project "main_gpu"
 
     -- Src
     files { "main_gpu.cpp" }
-    files { "minimum_lbvh.h" }
-
+    files { "minimum_lbvh.h", "sobol.h" }
     files { "shader.h", "typedbuffer.h", "typedbuffer.natvis" }
+
+    -- 
+    includedirs{ "libs/prlib/libs/tiny_obj_loader" }
+
 
     -- Orochi
     includedirs { "libs/orochi" }

@@ -16,6 +16,8 @@
 #include "shader.h"
 #include "sobol.h"
 
+#include "tiny_obj_loader.h"
+
 inline glm::vec3 to(float3 p)
 {
     return { p.x, p.y, p.z };
@@ -28,6 +30,8 @@ inline float3 to(glm::vec3 p)
 struct TriangleAttrib
 {
     float3 shadingNormals[3];
+    float3 reflectance;
+    float3 emissive;
 };
 
 class DeviceStopwatch
@@ -79,7 +83,7 @@ int main() {
         return 0;
     }
 
-    int DEVICE_INDEX = 0;
+    int DEVICE_INDEX = 2;
     oroInit(0);
     oroDevice device;
     oroDeviceGet(&device, DEVICE_INDEX);
@@ -175,7 +179,7 @@ int main() {
     int maxSPP = 16;
 
     // BVH
-    TypedBuffer<minimum_lbvh::Triangle> triangles(TYPED_BUFFER_HOST);
+    std::vector<minimum_lbvh::Triangle> triangles(TYPED_BUFFER_HOST);
     TypedBuffer<minimum_lbvh::Triangle> trianglesDevice(TYPED_BUFFER_DEVICE);
 
     minimum_lbvh::BVHCPUBuilder builder;
@@ -201,6 +205,7 @@ int main() {
         DrawGrid(GridAxis::XZ, 1.0f, 10, { 128, 128, 128 });
         DrawXYZAxis(1.0f);
 
+#if 1
         scene->visitPolyMesh([&](std::shared_ptr<const FPolyMeshEntity> polymesh) {
             if (polymesh->visible() == false)
             {
@@ -211,7 +216,7 @@ int main() {
             ColumnView<glm::vec3> positions(polymesh->positions());
             ColumnView<glm::vec3> normals(polymesh->normals());
 
-            triangles.allocate(faceCounts.count());
+            triangles.resize(faceCounts.count());
             triangleAttribs.allocate(faceCounts.count());
 
             int indexBase = 0;
@@ -259,10 +264,78 @@ int main() {
 
             if (gpuBuilder.empty())
             {
-                triangles.copyTo(&trianglesDevice);
+                trianglesDevice << triangles;
+                // triangles.copyTo(&trianglesDevice);
                 gpuBuilder.build(trianglesDevice.data(), trianglesDevice.size(), onesweep, 0 /*stream*/);
             }
         });
+#else
+        if (builder.empty())
+        {
+            tinyobj::attrib_t attrib;
+            std::vector<tinyobj::shape_t> shapes;
+            std::vector<tinyobj::material_t> materials;
+
+            std::string objError;
+            std::string objWarn;
+            std::string filename = GetDataPath("assets/cornelbox.obj");
+            bool success = tinyobj::LoadObj(&attrib, &shapes, &materials, &objWarn, &objError, filename.c_str(), GetPathDirname(filename).c_str());
+            if (!success)
+            {
+                printf("%s\n", objError.c_str());
+                abort();
+            }
+            if (!objWarn.empty())
+            {
+                printf("warn: %s\n", objWarn.c_str());
+            }
+
+            for (size_t s = 0; s < shapes.size(); s++)
+            {
+                // Loop over faces(polygon)
+                size_t index_offset = 0;
+                for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++)
+                {
+                    size_t fv = size_t(shapes[s].mesh.num_face_vertices[f]);
+                    assert(fv == 3);
+                    // Loop over vertices in the face.
+                    float3 vertices[3];
+                    minimum_lbvh::Triangle triangle;
+                    TriangleAttrib triangleAttrib;
+
+                    for (size_t v = 0; v < fv; v++)
+                    {
+                        // access to vertex
+                        tinyobj::index_t idx = shapes[s].mesh.indices[index_offset + v];
+
+                        tinyobj::real_t vx = attrib.vertices[3 * size_t(idx.vertex_index) + 0];
+                        tinyobj::real_t vy = attrib.vertices[3 * size_t(idx.vertex_index) + 1];
+                        tinyobj::real_t vz = attrib.vertices[3 * size_t(idx.vertex_index) + 2];
+
+                        tinyobj::real_t nx = attrib.normals[3 * size_t(idx.normal_index) + 0];
+                        tinyobj::real_t ny = attrib.normals[3 * size_t(idx.normal_index) + 1];
+                        tinyobj::real_t nz = attrib.normals[3 * size_t(idx.normal_index) + 2];
+
+                        triangle.vs[v] = { vx, vy, vz };
+                        triangleAttrib.shadingNormals[v] = { nx, ny, nz };
+                    }
+                    index_offset += fv;
+
+                    // per-face material
+                    int matId = shapes[s].mesh.material_ids[f];
+                    if (!materials.empty())
+                    {
+                        triangleAttrib.reflectance = { materials[matId].diffuse[0], materials[matId].diffuse[1], materials[matId].diffuse[2] };
+                        triangleAttrib.emissive = { materials[matId].emission[0], materials[matId].emission[1], materials[matId].emission[2] };
+                    }
+                    triangles.push_back(triangle);
+                    triangleAttribs.push_back(triangleAttrib);
+                }
+            }
+
+            printf("");
+        }
+#endif
 
         int imageWidth = GetScreenWidth();
         int imageHeight = GetScreenHeight();

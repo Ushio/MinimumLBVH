@@ -4,6 +4,7 @@
 #define TYPED_BUFFER_DEVICE_INLINE __device__ inline
 #define TYPED_BUFFER_ASSERT(ExpectTrue) ((void)0)
 #else
+#include <vector>
 #include <Orochi/Orochi.h>
 #define TYPED_BUFFER_DEVICE_INLINE
 #define TYPED_BUFFER_ASSERT(ExpectTrue) if((ExpectTrue) == 0) { abort(); }
@@ -84,17 +85,7 @@ struct TypedBuffer
         oroMemcpyHtoD((oroDeviceptr)r.data(), m_data, m_size * sizeof(T));
         return r;
     }
-    void copyTo(TypedBuffer<T>* to) const
-    {
-        to->allocate(size());
-        oroMemcpyKind kind =
-            isHost()
-            ?
-            (to->isHost() ? oroMemcpyHostToHost : oroMemcpyHostToDevice)
-            :
-            (to->isHost() ? oroMemcpyDeviceToHost : oroMemcpyDeviceToDevice);
-        oroMemcpy(to->data(), (oroDeviceptr)data(), size() * sizeof(T), kind);
-    }
+
 #endif
 
     TYPED_BUFFER_DEVICE_INLINE size_t size() const { return m_size; }
@@ -124,3 +115,35 @@ struct TypedBuffer
 
     TYPED_BUFFER_DEVICE_INLINE bool isHost() const { return !isDevice(); }
 };
+
+#if (defined(__CUDACC__) || defined(__HIPCC__))
+#else
+template <class T>
+void operator<<(TypedBuffer<T>& to, const TypedBuffer<T>& from )
+{
+    to.allocate(from.size());
+    oroMemcpyKind kind =
+        from.isHost()
+        ?
+        (to.isHost() ? oroMemcpyHostToHost : oroMemcpyHostToDevice)
+        :
+        (to.isHost() ? oroMemcpyDeviceToHost : oroMemcpyDeviceToDevice);
+    oroMemcpy(to.data(), (oroDeviceptr)from.data(), from.size() * sizeof(T), kind);
+}
+
+template <class T>
+void operator<<(TypedBuffer<T>& to, const std::vector<T>& from)
+{
+    to.allocate(from.size());
+    oroMemcpyKind kind = to.isHost() ? oroMemcpyHostToHost : oroMemcpyHostToDevice;
+    oroMemcpy(to.data(), (oroDeviceptr)from.data(), from.size() * sizeof(T), kind);
+}
+
+template <class T>
+void operator<<(std::vector<T>& to, const TypedBuffer<T>& from)
+{
+    to.resize(from.size());
+    oroMemcpyKind kind = from.isHost() ? oroMemcpyHostToHost : oroMemcpyDeviceToHost;
+    oroMemcpy(to.data(), (oroDeviceptr)from.data(), from.size() * sizeof(T), kind);
+}
+#endif
