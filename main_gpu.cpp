@@ -165,6 +165,7 @@ int main() {
 
     double e = GetElapsedTime();
     bool showWire = false;
+    bool showGrid = false;
     bool useSobol = true;
 
     enum {
@@ -199,8 +200,11 @@ int main() {
 
         PushGraphicState();
 
-        DrawGrid(GridAxis::XZ, 1.0f, 10, { 128, 128, 128 });
-        DrawXYZAxis(1.0f);
+        if (showGrid)
+        {
+            DrawGrid(GridAxis::XZ, 1.0f, 10, { 128, 128, 128 });
+            DrawXYZAxis(1.0f);
+        }
 
         if (gpuBuilder.empty())
         {
@@ -387,6 +391,7 @@ int main() {
         ImGui::Begin("Panel");
         ImGui::Text("fps = %f", GetFrameRate());
         ImGui::Checkbox("showWire", &showWire);
+        ImGui::Checkbox("showGrid", &showGrid);
         if (ImGui::Checkbox("use sobol", &useSobol))
         {
             oroMemsetD8(accumulators.data(), 0, accumulators.size() * sizeof(float4));
