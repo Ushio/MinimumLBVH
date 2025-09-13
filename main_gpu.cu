@@ -34,6 +34,8 @@ __device__ float3 sampleHemisphereCosWeighted(float xi_0, float xi_1)
     float y = sqrtf(fmax(1.0f - r * r, 0.0f));
     return { x, y, z };
 }
+
+// Building an Orthonormal Basis, Revisited
 __device__ void GetOrthonormalBasis(float3 zaxis, float3* xaxis, float3* yaxis) {
     const float sign = copysignf(1.0f, zaxis.z);
     const float a = -1.0f / (sign + zaxis.z);
