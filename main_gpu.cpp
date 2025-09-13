@@ -361,6 +361,15 @@ int main() {
                     16, 16, 1,
                     0
                 );
+                shader.launch("pack",
+                    ShaderArgument()
+                    .value(pixels.data())
+                    .value(accumulators.data())
+                    .value(imageWidth * imageHeight),
+                    div_round_up64(imageWidth* imageHeight, 256), 1, 1,
+                    256, 1, 1,
+                    0
+                );
             }
 
             sw.stop();

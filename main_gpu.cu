@@ -258,10 +258,19 @@ extern "C" __global__ void pt(uint32_t* pixels, float4 *accumulators, int2 image
         acc += make_float4(color.x, color.y, color.z, 1);
         accumulators[pixel] = acc;
     }
-
-    pixels[pixel] = packRGBA({ 
-        powf(acc.x / acc.w, 1.0f / 2.2f), 
-        powf(acc.y / acc.w, 1.0f / 2.2f), 
-        powf(acc.z / acc.w, 1.0f / 2.2f), 
-        1.0f });
+}
+extern "C" __global__ void pack( uint32_t* pixels, float4* accumulators, int n )
+{
+    int xi = threadIdx.x + blockDim.x * blockIdx.x;
+    if (n <= xi)
+    {
+        return;
+    }
+    float4 acc = accumulators[xi];
+    pixels[xi] = packRGBA({
+        powf(acc.x / acc.w, 1.0f / 2.2f),
+        powf(acc.y / acc.w, 1.0f / 2.2f),
+        powf(acc.z / acc.w, 1.0f / 2.2f),
+        1.0f }
+    );
 }
