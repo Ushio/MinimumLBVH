@@ -144,15 +144,12 @@ int main() {
     Initialize(config);
 
     Camera3D camera;
-    camera.origin = { 8.0f, 8.0f, 8.0f };
-    camera.lookat = { 0, 0, 0 };
-
-    //camera.fovy = 0.002f;
-    //camera.origin = { 500, 500, 500 };
+    camera.origin = { 0.0f, 1.0f, 4.0f };
+    camera.lookat = { 0, 1.0f, 0 };
 
     SetDataDir(ExecutableDir());
     std::string err;
-    std::shared_ptr<FScene> scene = ReadWavefrontObj(GetDataPath("assets/test.obj"), err);
+    std::shared_ptr<FScene> scene = ReadWavefrontObj(GetDataPath("assets/cornelbox.obj"), err);
 
     double e = GetElapsedTime();
     bool showWire = false;
