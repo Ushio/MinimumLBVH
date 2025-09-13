@@ -173,7 +173,7 @@ int main() {
         MODE_PT,
     };
     int mode = 2;
-    int maxSPP = 16;
+    int maxSPP = 1024;
 
     // BVH
     std::vector<minimum_lbvh::Triangle> triangles(TYPED_BUFFER_HOST);
@@ -383,7 +383,7 @@ int main() {
 
         BeginImGui();
 
-        ImGui::SetNextWindowSize({ 500, 800 }, ImGuiCond_Once);
+        ImGui::SetNextWindowSize({ 400, 800 }, ImGuiCond_Once);
         ImGui::Begin("Panel");
         ImGui::Text("fps = %f", GetFrameRate());
         ImGui::Checkbox("showWire", &showWire);
