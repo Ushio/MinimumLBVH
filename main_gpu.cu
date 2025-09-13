@@ -184,8 +184,18 @@ extern "C" __global__ void pt(uint32_t* pixels, float4 *accumulators, int2 image
 
     PCG rng(hashPCG(hashPCG(pixel) + iteration), 0);
 
+    float2 random;
+    if (useSobol)
+    {
+        sobol::shuffled_scrambled_sobol_2d(&random.x, &random.y, iteration, xi, yi, -1);
+    }
+    else
+    {
+        random = make_float2(rng.uniformf(), rng.uniformf());
+    }
+
     float3 ro, rd;
-    rayGenerator.shoot(&ro, &rd, (float)xi / imageSize.x, (float)yi / imageSize.y);
+    rayGenerator.shoot(&ro, &rd, (float)(xi + random.x) / imageSize.x, (float)(yi + random.y) / imageSize.y);
 
     float3 color = {};
     float3 throughput = { 1.0f, 1.0f, 1.0f };
