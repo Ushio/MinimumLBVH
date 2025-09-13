@@ -118,9 +118,10 @@ int main() {
     //    }
 
     //    TypedBuffer<ValType> xsBuffer(TYPED_BUFFER_DEVICE);
-    //    xs.copyTo(&xsBuffer);
+    //    xsBuffer << xs;
+
     //    TypedBuffer<uint32_t> indicesBuffer(TYPED_BUFFER_DEVICE);
-    //    indices.copyTo(&indicesBuffer);
+    //    indicesBuffer << indices;
     //    TypedBuffer<ValType> xsTmp(TYPED_BUFFER_DEVICE);
     //    TypedBuffer<uint32_t> indicesTmp(TYPED_BUFFER_DEVICE);
     //    xsTmp.allocate(xs.size());
@@ -132,8 +133,10 @@ int main() {
     //    sw.stop();
     //    printf("%f\n", sw.getElapsedMs());
 
-    //    TypedBuffer<ValType> sortedXs = xsBuffer.copyToHost();
-    //    TypedBuffer<uint32_t> sortedIndices = indicesBuffer.copyToHost();
+    //    TypedBuffer<ValType> sortedXs(TYPED_BUFFER_HOST);
+    //    sortedXs << xsBuffer;
+    //    TypedBuffer<uint32_t> sortedIndices(TYPED_BUFFER_HOST);
+    //    sortedIndices << indicesBuffer;
     //    for (int i = 0; i < N - 1; i++)
     //    {
     //        MINIMUM_LBVH_ASSERT(sortedXs[i] == xs[sortedIndices[i]]);
@@ -183,7 +186,8 @@ int main() {
     TypedBuffer<minimum_lbvh::Triangle> trianglesDevice(TYPED_BUFFER_DEVICE);
 
     minimum_lbvh::BVHCPUBuilder builder;
-    TypedBuffer<TriangleAttrib> triangleAttribs(TYPED_BUFFER_HOST);
+    std::vector<TriangleAttrib> triangleAttribs(TYPED_BUFFER_HOST);
+    TypedBuffer<TriangleAttrib> triangleAttribsDevice(TYPED_BUFFER_DEVICE);
 
     ITexture* texture = CreateTexture();
 
@@ -205,7 +209,7 @@ int main() {
         DrawGrid(GridAxis::XZ, 1.0f, 10, { 128, 128, 128 });
         DrawXYZAxis(1.0f);
 
-#if 1
+#if 0
         scene->visitPolyMesh([&](std::shared_ptr<const FPolyMeshEntity> polymesh) {
             if (polymesh->visible() == false)
             {
@@ -265,13 +269,15 @@ int main() {
             if (gpuBuilder.empty())
             {
                 trianglesDevice << triangles;
-                // triangles.copyTo(&trianglesDevice);
                 gpuBuilder.build(trianglesDevice.data(), trianglesDevice.size(), onesweep, 0 /*stream*/);
             }
         });
 #else
-        if (builder.empty())
+        if (gpuBuilder.empty())
         {
+            triangles.clear();
+            triangleAttribs.clear();
+
             tinyobj::attrib_t attrib;
             std::vector<tinyobj::shape_t> shapes;
             std::vector<tinyobj::material_t> materials;
@@ -321,7 +327,6 @@ int main() {
                     }
                     index_offset += fv;
 
-                    // per-face material
                     int matId = shapes[s].mesh.material_ids[f];
                     if (!materials.empty())
                     {
@@ -333,7 +338,8 @@ int main() {
                 }
             }
 
-            printf("");
+            trianglesDevice << triangles;
+            gpuBuilder.build(trianglesDevice.data(), trianglesDevice.size(), onesweep, 0 /*stream*/);
         }
 #endif
 

@@ -68,24 +68,6 @@ struct TypedBuffer
         other.m_data = nullptr;
         other.m_size = 0;
     }
-
-    TypedBuffer<T> copyToHost() const
-    {
-        TYPED_BUFFER_ASSERT(isDevice());
-        TypedBuffer<T> r(TYPED_BUFFER_HOST);
-        r.allocate(size());
-        oroMemcpyDtoH(r.data(), (oroDeviceptr)m_data, m_size * sizeof(T));
-        return r;
-    }
-    TypedBuffer<T> copyToDevice() const
-    {
-        TYPED_BUFFER_ASSERT(isDevice() == false);
-        TypedBuffer<T> r(TYPED_BUFFER_DEVICE);
-        r.allocate(size());
-        oroMemcpyHtoD((oroDeviceptr)r.data(), m_data, m_size * sizeof(T));
-        return r;
-    }
-
 #endif
 
     TYPED_BUFFER_DEVICE_INLINE size_t size() const { return m_size; }
