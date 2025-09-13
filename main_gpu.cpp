@@ -73,7 +73,7 @@ int main() {
     Config config;
     config.ScreenWidth = 1920;
     config.ScreenHeight = 1080;
-    config.SwapInterval = 1;
+    config.SwapInterval = 0;
     Initialize(config);
     SetDataDir(ExecutableDir());
 
@@ -83,7 +83,7 @@ int main() {
         return 0;
     }
 
-    int DEVICE_INDEX = 2;
+    int DEVICE_INDEX = 0;
     oroInit(0);
     oroDevice device;
     oroDeviceGet(&device, DEVICE_INDEX);
@@ -165,9 +165,6 @@ int main() {
     //camera.origin = { 500, 500, 500 };
 
     SetDataDir(ExecutableDir());
-    std::string err;
-    //std::shared_ptr<FScene> scene = ReadWavefrontObj(GetDataPath("assets/blocks_ao.obj"), err);
-    std::shared_ptr<FScene> scene = ReadWavefrontObj(GetDataPath("assets/cornelbox.obj"), err);
 
     double e = GetElapsedTime();
     bool showWire = false;
@@ -209,70 +206,6 @@ int main() {
         DrawGrid(GridAxis::XZ, 1.0f, 10, { 128, 128, 128 });
         DrawXYZAxis(1.0f);
 
-#if 0
-        scene->visitPolyMesh([&](std::shared_ptr<const FPolyMeshEntity> polymesh) {
-            if (polymesh->visible() == false)
-            {
-                return;
-            }
-            ColumnView<int32_t> faceCounts(polymesh->faceCounts());
-            ColumnView<int32_t> indices(polymesh->faceIndices());
-            ColumnView<glm::vec3> positions(polymesh->positions());
-            ColumnView<glm::vec3> normals(polymesh->normals());
-
-            triangles.resize(faceCounts.count());
-            triangleAttribs.allocate(faceCounts.count());
-
-            int indexBase = 0;
-            for (int i = 0; i < faceCounts.count(); i++)
-            {
-                int nVerts = faceCounts[i];
-                PR_ASSERT(nVerts == 3);
-                minimum_lbvh::Triangle tri;
-                TriangleAttrib attrib;
-                for (int j = 0; j < nVerts; ++j)
-                {
-                    glm::vec3 p = positions[indices[indexBase + j]];
-                    tri.vs[j] = { p.x, p.y, p.z };
-
-                    glm::vec3 ns = normals[indexBase + j];
-                    attrib.shadingNormals[j] = { ns.x, ns.y, ns.z };
-                }
-
-                float3 e0 = tri.vs[1] - tri.vs[0];
-                float3 e1 = tri.vs[2] - tri.vs[1];
-                float3 e2 = tri.vs[0] - tri.vs[2];
-
-                triangles[i] = tri;
-                triangleAttribs[i] = attrib;
-                indexBase += nVerts;
-            }
-
-            if (showWire)
-            {
-                pr::PrimBegin(pr::PrimitiveMode::Lines);
-
-                for (auto tri : triangles)
-                {
-                    for (int j = 0; j < 3; ++j)
-                    {
-                        float3 v0 = tri.vs[j];
-                        float3 v1 = tri.vs[(j + 1) % 3];
-                        pr::PrimVertex(to(v0), {255, 255, 255});
-                        pr::PrimVertex(to(v1), {255, 255, 255});
-                    }
-                }
-
-                pr::PrimEnd();
-            }
-
-            if (gpuBuilder.empty())
-            {
-                trianglesDevice << triangles;
-                gpuBuilder.build(trianglesDevice.data(), trianglesDevice.size(), onesweep, 0 /*stream*/);
-            }
-        });
-#else
         if (gpuBuilder.empty())
         {
             triangles.clear();
@@ -339,9 +272,27 @@ int main() {
             }
 
             trianglesDevice << triangles;
+            triangleAttribsDevice << triangleAttribs;
             gpuBuilder.build(trianglesDevice.data(), trianglesDevice.size(), onesweep, 0 /*stream*/);
         }
-#endif
+
+        if (showWire)
+        {
+            pr::PrimBegin(pr::PrimitiveMode::Lines);
+
+            for (auto tri : triangles)
+            {
+                for (int j = 0; j < 3; ++j)
+                {
+                    float3 v0 = tri.vs[j];
+                    float3 v1 = tri.vs[(j + 1) % 3];
+                    pr::PrimVertex(to(v0), { 255, 255, 255 });
+                    pr::PrimVertex(to(v1), { 255, 255, 255 });
+                }
+            }
+
+            pr::PrimEnd();
+        }
 
         int imageWidth = GetScreenWidth();
         int imageHeight = GetScreenHeight();
@@ -403,6 +354,7 @@ int main() {
                     .value(gpuBuilder.m_rootNode)
                     .value(gpuBuilder.m_internals)
                     .value(trianglesDevice.data())
+                    .value(triangleAttribsDevice.data())
                     .value(useSobol ? 1 : 0)
                     .value(maxSPP),
                     div_round_up64(imageWidth, 16), div_round_up64(imageHeight, 16), 1,

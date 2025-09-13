@@ -7,6 +7,13 @@ using namespace minimum_lbvh;
 
 constexpr float PI = 3.14159265358979323846f;
 
+struct TriangleAttrib
+{
+    float3 shadingNormals[3];
+    float3 reflectance;
+    float3 emissive;
+};
+
 __device__ uint32_t packRGBA( float4 color )
 {
     int4 i4 = make_int4(color * 255.0f + make_float4(0.5f));
@@ -167,7 +174,7 @@ extern "C" __global__ void ao(uint32_t* pixels, int2 imageSize, RayGenerator ray
     pixels[pixel] = packRGBA({ color.x, color.y, color.z, 1.0f });
 }
 
-extern "C" __global__ void pt(uint32_t* pixels, float4 *accumulators, int2 imageSize, RayGenerator rayGenerator, const NodeIndex* rootNode, const InternalNode* internals, const Triangle* triangles, int useSobol, int maxSPP)
+extern "C" __global__ void pt(uint32_t* pixels, float4 *accumulators, int2 imageSize, RayGenerator rayGenerator, const NodeIndex* rootNode, const InternalNode* internals, const Triangle* triangles, const TriangleAttrib* triangleAttribs, int useSobol, int maxSPP)
 {
     int xi = threadIdx.x + blockDim.x * blockIdx.x;
     int yi = threadIdx.y + blockDim.y * blockIdx.y;
@@ -223,6 +230,8 @@ extern "C" __global__ void pt(uint32_t* pixels, float4 *accumulators, int2 image
             hit_n = -hit_n;
         }
 
+        color += throughput * triangleAttribs[hit.triangleIndex].emissive;
+
         float3 xaxis;
         float3 zaxis;
         GetOrthonormalBasis(hit_n, &xaxis, &zaxis);
@@ -230,13 +239,13 @@ extern "C" __global__ void pt(uint32_t* pixels, float4 *accumulators, int2 image
         float3 next_ro = hit_p + hit_n * 0.0001f;
         float3 next_rd = xaxis * dirLocal.x + zaxis * dirLocal.z + hit_n * dirLocal.y;
 
-        throughput *= make_float3(0.7f, 0.65f, 0.67f);
+        throughput *= triangleAttribs[hit.triangleIndex].reflectance;
 
         hit = Hit();
         intersect(&hit, internals, triangles, *rootNode, next_ro, next_rd, invRd(next_rd));
         if (hit.t == MINIMUM_LBVH_FLT_MAX )
         {
-            color += throughput * make_float3(1.0f);
+            // color += throughput * make_float3(1.0f);
             break;
         }
 
