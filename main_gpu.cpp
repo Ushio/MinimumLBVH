@@ -161,9 +161,6 @@ int main() {
     camera.origin = { 0.0f, 1.0f, 4.0f };
     camera.lookat = { 0, 1.0f, 0 };
 
-    //camera.fovy = 0.002f;
-    //camera.origin = { 500, 500, 500 };
-
     SetDataDir(ExecutableDir());
 
     double e = GetElapsedTime();
@@ -182,7 +179,6 @@ int main() {
     std::vector<minimum_lbvh::Triangle> triangles(TYPED_BUFFER_HOST);
     TypedBuffer<minimum_lbvh::Triangle> trianglesDevice(TYPED_BUFFER_DEVICE);
 
-    minimum_lbvh::BVHCPUBuilder builder;
     std::vector<TriangleAttrib> triangleAttribs(TYPED_BUFFER_HOST);
     TypedBuffer<TriangleAttrib> triangleAttribsDevice(TYPED_BUFFER_DEVICE);
 
