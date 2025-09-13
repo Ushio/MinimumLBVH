@@ -190,16 +190,23 @@ extern "C" __global__ void pt(uint32_t* pixels, float4 *accumulators, int2 image
     int iteration = acc.w;
 
     PCG rng(hashPCG(hashPCG(pixel) + iteration), 0);
+    int dimLevel = 0;
 
-    float2 random;
-    if (useSobol)
+    auto nextRandom = [useSobol, iteration, xi, yi, &rng, &dimLevel]()
     {
-        sobol::shuffled_scrambled_sobol_2d(&random.x, &random.y, iteration, xi, yi, -1);
-    }
-    else
-    {
-        random = make_float2(rng.uniformf(), rng.uniformf());
-    }
+        float2 r;
+        if (useSobol)
+        {
+            sobol::shuffled_scrambled_sobol_2d(&r.x, &r.y, iteration, xi, yi, dimLevel++);
+        }
+        else
+        {
+            r = make_float2(rng.uniformf(), rng.uniformf());
+        }
+        return r;
+    };
+
+    float2 random = nextRandom();
 
     float3 ro, rd;
     rayGenerator.shoot(&ro, &rd, (float)(xi + random.x) / imageSize.x, (float)(yi + random.y) / imageSize.y);
@@ -213,15 +220,7 @@ extern "C" __global__ void pt(uint32_t* pixels, float4 *accumulators, int2 image
     if (hit.t != MINIMUM_LBVH_FLT_MAX)
     for (int depth = 0; depth < 1024; depth++)
     {
-        float2 random;
-        if (useSobol)
-        {
-            sobol::shuffled_scrambled_sobol_2d(&random.x, &random.y, iteration, xi, yi, depth);
-        }
-        else
-        {
-            random = make_float2(rng.uniformf(), rng.uniformf());
-        }
+        float2 random = nextRandom();
 
         float3 hit_p = ro + rd * hit.t;
         float3 hit_n = normalize(hit.ng);
@@ -245,7 +244,7 @@ extern "C" __global__ void pt(uint32_t* pixels, float4 *accumulators, int2 image
         float maxComp = fmaxf(fmaxf(throughput.x, throughput.y), throughput.z);
 
         float p = fminf(maxComp / rrThreshold, 1.0f);
-        if (p < rng.uniformf())
+        if (p < nextRandom().x)
         {
             break;
         }
