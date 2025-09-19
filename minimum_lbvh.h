@@ -791,7 +791,7 @@ namespace minimum_lbvh
 					0 /*shared*/, stream, args, 0 /*extras*/);
 			}
 
-			sorter.sort({ (uint64_t *)indexedMortons, 0 }, { (uint64_t*)indexedMortonsTmp, 0 }, nTriangles, 0, sizeof(uint32_t) * 8, 0);
+			sorter.sort({ (uint64_t *)indexedMortons, 0 }, { (uint64_t*)indexedMortonsTmp, 0 }, nTriangles, 0, sizeof(uint32_t) * 8, stream);
 
 			{
 				const void* args[] = {
@@ -822,11 +822,10 @@ namespace minimum_lbvh
 					256, 1, 1,
 					0 /*shared*/, stream, args, 0 /*extras*/);
 			}
-			// oroError e = oroStreamSynchronize(stream);
 
-			oroFree(indexedMortons);
-			oroFree(indexedMortonsTmp);
-			oroFree(deltas);
+			oroFreeAsync(indexedMortons, stream);
+			oroFreeAsync(indexedMortonsTmp, stream);
+			oroFreeAsync(deltas, stream);
 
 			sw.stop();
 			printf("%f ms\n", sw.getElapsedMs());
