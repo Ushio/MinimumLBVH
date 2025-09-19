@@ -261,10 +261,15 @@ int main() {
                     index_offset += fv;
 
                     int matId = shapes[s].mesh.material_ids[f];
-                    if (!materials.empty())
+                    if (!materials.empty() && 0 <= matId )
                     {
                         triangleAttrib.reflectance = { materials[matId].diffuse[0], materials[matId].diffuse[1], materials[matId].diffuse[2] };
                         triangleAttrib.emissive = { materials[matId].emission[0], materials[matId].emission[1], materials[matId].emission[2] };
+                    }
+                    else
+                    {
+                        triangleAttrib.reflectance = { 0.5f, 0.5f, 0.5f };
+                        triangleAttrib.emissive = {};
                     }
                     triangles.push_back(triangle);
                     triangleAttribs.push_back(triangleAttrib);
