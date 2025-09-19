@@ -94,7 +94,7 @@ extern "C" __global__ void normal(uint32_t *pixels, int2 imageSize, RayGenerator
         rayGenerator.shoot(&ro, &rd, (float)xi / imageSize.x, (float)yi / imageSize.y);
 
         Hit hit;
-        intersect(&hit, internals, triangles, *rootNode, ro, rd, invRd(rd));
+        intersect_stackfree(&hit, internals, triangles, *rootNode, ro, rd, invRd(rd));
         if (hit.t != MINIMUM_LBVH_FLT_MAX)
         {
             float3 n = normalize(hit.ng);
@@ -124,7 +124,7 @@ extern "C" __global__ void ao(uint32_t* pixels, int2 imageSize, RayGenerator ray
     rayGenerator.shoot(&ro, &rd, (float)xi / imageSize.x, (float)yi / imageSize.y);
 
     Hit hit;
-    intersect(&hit, internals, triangles, *rootNode, ro, rd, invRd(rd));
+    intersect_stackfree(&hit, internals, triangles, *rootNode, ro, rd, invRd(rd));
     if (hit.t == MINIMUM_LBVH_FLT_MAX)
     {
         pixels[pixel] = packRGBA({ 0, 0, 0, 1 });
@@ -165,7 +165,7 @@ extern "C" __global__ void ao(uint32_t* pixels, int2 imageSize, RayGenerator ray
         float length = 1.0f;
         Hit hit;
         hit.t = length;
-        intersect(&hit, internals, triangles, *rootNode, ao_origin, dir, invRd(dir), RAY_QUERY_ANY);
+        intersect_stackfree(&hit, internals, triangles, *rootNode, ao_origin, dir, invRd(dir), RAY_QUERY_ANY);
         if (hit.t != length)
         {
             ao += 1.0f / nSample;
@@ -217,7 +217,7 @@ extern "C" __global__ void pt(uint32_t* pixels, float4 *accumulators, int2 image
     float3 throughput = { 1.0f, 1.0f, 1.0f };
 
     Hit hit;
-    intersect(&hit, internals, triangles, *rootNode, ro, rd, invRd(rd));
+    intersect_stackfree(&hit, internals, triangles, *rootNode, ro, rd, invRd(rd));
 
     if (hit.t != MINIMUM_LBVH_FLT_MAX)
     for (int depth = 0; depth < 1024; depth++)
@@ -253,7 +253,7 @@ extern "C" __global__ void pt(uint32_t* pixels, float4 *accumulators, int2 image
         throughput /= p;
 
         hit = Hit();
-        intersect(&hit, internals, triangles, *rootNode, next_ro, next_rd, invRd(next_rd));
+        intersect_stackfree(&hit, internals, triangles, *rootNode, next_ro, next_rd, invRd(next_rd));
         if (hit.t == MINIMUM_LBVH_FLT_MAX )
         {
             // color += throughput * make_float3(1.0f);

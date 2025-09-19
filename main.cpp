@@ -81,7 +81,7 @@ void runToyExample()
     internals.resize(mortons.size() - 1);
     for (int i = 0; i < internals.size(); i++)
     {
-        internals[i].oneOfEdges = 0xFFFFFFFF;
+        internals[i].context = 0xFFFFFFFF;
     }
     
     std::vector<uint32_t> sortedTriangleIndices(mortons.size());
@@ -149,7 +149,7 @@ int main() {
 
     SetDataDir(ExecutableDir());
     std::string err;
-    std::shared_ptr<FScene> scene = ReadWavefrontObj(GetDataPath("assets/cornelbox.obj"), err);
+    std::shared_ptr<FScene> scene = ReadWavefrontObj(GetDataPath("assets/scene_hair.obj"), err);
 
     double e = GetElapsedTime();
     bool showWire = false;
@@ -271,7 +271,7 @@ int main() {
                 rayGenerator.shoot(&ro, &rd, i, j, 0.5f, 0.5f);
 
                 minimum_lbvh::Hit hit;
-                minimum_lbvh::intersect(&hit, builder.m_internals.data(), triangles.data(), builder.m_rootNode, to(ro), to(rd), minimum_lbvh::invRd(to(rd)));
+                minimum_lbvh::intersect_stackfree(&hit, builder.m_internals.data(), triangles.data(), builder.m_rootNode, to(ro), to(rd), minimum_lbvh::invRd(to(rd)));
                 if (hit.t != FLT_MAX)
                 {
                     float3 n = normalize(hit.ng);
