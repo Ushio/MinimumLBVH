@@ -243,7 +243,7 @@ int main() {
             {
 #if 1
                 Stopwatch sw;
-                builder.build(triangles.data(), triangles.size(), true /* isParallel */);
+                builder.build(triangles.data(), triangles.size(), minimum_lbvh::BUILD_OPTION_CPU_PARALLEL);
                 printf("build %f\n", sw.elapsed());
 
                 builder.validate();

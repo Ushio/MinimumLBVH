@@ -278,7 +278,7 @@ int main() {
 
             trianglesDevice << triangles;
             triangleAttribsDevice << triangleAttribs;
-            gpuBuilder.build(trianglesDevice.data(), trianglesDevice.size(), onesweep, 0 /*stream*/);
+            gpuBuilder.build(trianglesDevice.data(), trianglesDevice.size(), 0, onesweep, 0 /*stream*/);
         }
 
         if (showWire)

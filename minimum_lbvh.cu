@@ -65,7 +65,7 @@ extern "C" __global__ void getSceneAABB(AABB* sceneAABB, const Triangle* triangl
 	}
 }
 
-extern "C" __global__ void buildMortons(IndexedMorton* indexedMortons, const Triangle *triangles, int nTriangles, const AABB* sceneAABB)
+extern "C" __global__ void buildMortons(IndexedMorton* indexedMortons, const Triangle *triangles, int nTriangles, const AABB* sceneAABB, uint32_t buildOption)
 {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (nTriangles <= idx)
@@ -75,7 +75,19 @@ extern "C" __global__ void buildMortons(IndexedMorton* indexedMortons, const Tri
 
 	Triangle tri = triangles[idx];
 	float3 center = (tri.vs[0] + tri.vs[1] + tri.vs[2]) / 3.0f;
-	indexedMortons[idx].morton = (uint32_t)(sceneAABB->encodeMortonCode(center) >> 31); // take higher 32bits out of 63bits
+
+	if (buildOption & BUILD_OPTION_USE_NORMAL)
+	{
+		float3 ng = normalOf(tri);
+		AABB unit = { {-1, -1, -1}, {+1, +1, +1} };
+		uint32_t nMorton = (uint32_t)(unit.encodeMortonCode(ng) >> 31);
+		uint32_t pMorton = (uint32_t)(sceneAABB->encodeMortonCode(center) >> 31);
+		indexedMortons[idx].morton = encode32Morton2D(pMorton >> 16, nMorton >> 16);
+	}
+	else
+	{
+		indexedMortons[idx].morton = (uint32_t)(sceneAABB->encodeMortonCode(center) >> 31); // take higher 32bits out of 63bits
+	}
 	indexedMortons[idx].index = idx;
 }
 
