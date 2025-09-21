@@ -82,7 +82,7 @@ extern "C" __global__ void buildMortons(IndexedMorton* indexedMortons, const Tri
 		AABB unit = { {-1, -1, -1}, {+1, +1, +1} };
 		uint32_t nMorton = (uint32_t)(unit.encodeMortonCode(ng) >> 31);
 		uint32_t pMorton = (uint32_t)(sceneAABB->encodeMortonCode(center) >> 31);
-		indexedMortons[idx].morton = encode32Morton2D(pMorton >> 16, nMorton >> 16);
+		indexedMortons[idx].morton = (pMorton & 0xFFFFFFC0) | (nMorton >> 26);
 	}
 	else
 	{
